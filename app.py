@@ -151,10 +151,19 @@ def item_detail(item_id):
         "publish_date_fmt": fmt
     })
 
+@app.route('/api/items/<item_id>')
+def api_item(item_id):
+    doc = db.collection('items').document(item_id).get()
+    if not doc.exists:
+        return jsonify({'error':'not found'}), 404
+    data = doc.to_dict()
+    return jsonify({'status': data.get('status'), 'error': data.get('error','')}), 200
+
 
 @app.route("/feed.xml", methods=["GET"])
 def rss_feed():
     xml = generate_feed(request.url_root, bucket_name=GCS_BUCKET)
+    # xml is now guaranteed to be a UTF-8 string
     return Response(xml, mimetype="application/rss+xml")
 
 
