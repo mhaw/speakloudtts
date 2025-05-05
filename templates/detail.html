@@ -1,32 +1,164 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 class="text-3xl font-bold mb-4">{{ item.title }}</h2>
-  <p class="text-gray-600 mb-2">
-    By <strong>{{ item.author or "Unknown" }}</strong>
-    {% if item.publish_date %}| {{ item.publish_date }}{% endif %}
-    | {{ item.reading_time_min }} min read
-  </p>
 
-  <div class="mb-4">
-    {% if item.tags %}
-      {% for tag in item.tags %}
-        <span class="inline-block bg-gray-200 text-sm px-2 py-1 rounded mr-2">{{ tag }}</span>
-      {% endfor %}
-    {% endif %}
+  <!-- Sticky header: Title + Byline + Audio + Controls -->
+  <div class="sticky top-0 bg-white dark:bg-gray-900 z-30 border-b border-gray-200 dark:border-gray-700">
+    <div class="container mx-auto px-4 py-4">
+
+      <!-- Title + favicon + original link -->
+      <div class="flex items-center mb-2 space-x-2">
+        {% if item.favicon_url %}
+          <img src="{{ item.favicon_url }}" alt="favicon" class="w-6 h-6">
+        {% endif %}
+        <h1 class="text-2xl sm:text-3xl font-bold leading-tight">
+          <a href="{{ item.url }}" target="_blank" rel="noopener"
+             class="hover:underline text-primary">
+            {{ item.title }}
+          </a>
+        </h1>
+      </div>
+
+      <!-- Byline -->
+      <p class="text-gray-600 dark:text-gray-400 mb-4 text-sm sm:text-base">
+        By <strong>{{ item.author or "Unknown" }}</strong>
+        {% if item.publish_date %}| {{ item.publish_date }}{% endif %}
+        | {{ item.reading_time_min }} min read
+      </p>
+
+      <!-- Audio player & speed -->
+      <div class="space-y-2">
+        <audio id="audio-player" controls class="w-full rounded-lg shadow-sm"
+               src="{{ item.audio_url }}"></audio>
+
+        <div class="flex flex-wrap items-center space-x-2 text-sm">
+          <span>Speed:</span>
+          <button data-rate="0.75" class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">0.75×</button>
+          <button data-rate="1"    class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1×</button>
+          <button data-rate="1.25" class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1.25×</button>
+          <button data-rate="1.5"  class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1.5×</button>
+        </div>
+
+        <progress id="audio-progress" value="0" max="100"
+                  class="w-full h-2 rounded bg-gray-200 dark:bg-gray-700"></progress>
+      </div>
+
+    </div>
   </div>
 
-  <div class="mb-6">
-    <audio controls class="w-full" src="{{ item.audio_url }}"></audio>
+  <!-- Add a little top padding so nothing is hidden behind the sticky header -->
+  <div class="pt-6 container mx-auto px-4">
+
+    <!-- Metadata panel -->
+    <details class="mb-6 bg-white p-4 rounded shadow dark:bg-gray-800">
+      <summary class="cursor-pointer font-medium">Metadata</summary>
+      <ul class="mt-2 list-disc list-inside text-sm text-gray-700 dark:text-gray-300 space-y-1">
+        <li><strong>Original URL:</strong>
+          <a href="{{ item.url }}" target="_blank" rel="noopener"
+             class="text-primary hover:underline">{{ item.url }}</a>
+        </li>
+        <li><strong>Publish Date:</strong> {{ item.publish_date or "N/A" }}</li>
+        <li><strong>Last Modified:</strong> {{ item.last_modified or "N/A" }}</li>
+        <li><strong>ETag:</strong> {{ item.etag or "N/A" }}</li>
+        <li><strong>Tags:</strong>
+          {% if item.tags %}
+            {% for tag in item.tags %}
+              <span class="inline-block bg-gray-200 text-xs px-2 py-1 rounded mr-1 mb-1 dark:bg-gray-700">
+                {{ tag }}
+              </span>
+            {% endfor %}
+          {% else %}None{% endif %}
+        </li>
+      </ul>
+    </details>
+
+    <!-- Download link -->
     <a href="{{ item.audio_url }}" download
-       class="inline-block mt-2 text-blue-600 hover:underline">
+       class="inline-block text-primary hover:underline text-sm mb-4">
       ⬇️ Download Audio
     </a>
+
+    <!-- Font-size controls -->
+    <div class="flex items-center space-x-2 mb-6">
+      <span class="font-medium">Text size:</span>
+      <button id="font-small"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A-</button>
+      <button id="font-normal" class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A</button>
+      <button id="font-large"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A+</button>
+    </div>
+
+    {# Build paragraph array #}
+    {% set paras = item.text.split('\n\n') %}
+    {% if paras|length <= 1 %}
+      {% set paras = item.text.splitlines() %}
+    {% endif %}
+
+    <!-- Full text with spacing -->
+    <article id="full-text"
+             class="prose prose-lg max-w-none space-y-8 bg-white p-6 rounded shadow dark:prose-invert dark:bg-gray-800">
+      {% for para in paras %}
+        {% if para.strip() %}
+          <p class="paragraph">{{ para|e }}</p>
+        {% endif %}
+      {% endfor %}
+    </article>
+
+    <!-- Back link -->
+    <p class="mt-8">
+      <a href="/items" class="text-primary hover:underline">&larr; Back to all articles</a>
+    </p>
   </div>
 
-  <h3 class="text-2xl font-semibold mb-2">Full Text</h3>
-  <div class="whitespace-pre-wrap bg-white p-4 rounded shadow mb-8">
-    {{ item.text }}
-  </div>
+  <!-- Page scripts -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const audio   = document.getElementById('audio-player'),
+            prog    = document.getElementById('audio-progress'),
+            paras   = Array.from(document.querySelectorAll('#full-text .paragraph')),
+            speeds  = document.querySelectorAll('.speed-btn');
 
-  <p><a href="/items" class="text-indigo-600 hover:underline">← Back to all articles</a></p>
+      // Precompute thresholds based on character counts
+      const lengths = paras.map(p => p.textContent.length),
+            total   = lengths.reduce((a,b) => a+b, 0);
+      let accum = 0, thresholds = lengths.map(len => (accum += len) / total);
+
+      // Speed buttons
+      speeds.forEach(btn => btn.addEventListener('click', () => {
+        audio.playbackRate = +btn.dataset.rate;
+        speeds.forEach(b=>b.classList.remove('bg-primary'));
+        btn.classList.add('bg-primary');
+      }));
+
+      // Highlight & scroll on timeupdate
+      audio.addEventListener('timeupdate', () => {
+        if (!audio.duration || thresholds.length < 2) {
+          prog.value = (audio.currentTime/audio.duration)*100;
+          return;
+        }
+        const pct = audio.currentTime / audio.duration;
+        let idx = thresholds.findIndex(t=>pct <= t);
+        if (idx < 0) idx = thresholds.length - 1;
+
+        paras.forEach((p,i) => {
+          if (i === idx) {
+            p.classList.add('bg-yellow-100','dark:bg-yellow-800','p-2','rounded');
+            p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            p.classList.remove('bg-yellow-100','dark:bg-yellow-800','p-2','rounded');
+          }
+        });
+        prog.value = pct * 100;
+      });
+
+      // Seek on progress click
+      prog.addEventListener('click', e => {
+        const pct = e.offsetX / prog.offsetWidth;
+        audio.currentTime = pct * audio.duration;
+      });
+
+      // Font-size controls
+      const ft = document.getElementById('full-text');
+      document.getElementById('font-small').onclick  = () => ft.classList.replace('prose-lg','text-sm');
+      document.getElementById('font-normal').onclick = () => ft.classList.replace('text-sm','prose-lg');
+      document.getElementById('font-large').onclick  = () => ft.classList.replace('prose-lg','text-xl');
+    });
+  </script>
 {% endblock %}
