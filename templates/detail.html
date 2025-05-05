@@ -1,97 +1,127 @@
 {% extends "base.html" %}
+
 {% block content %}
-
-  <!-- Sticky header: Title + Byline + Audio + Controls -->
+  {# Sticky header with back link, title, byline, audio & controls #}
   <div class="sticky top-0 bg-white dark:bg-gray-900 z-30 border-b border-gray-200 dark:border-gray-700">
-    <div class="container mx-auto px-4 py-4">
-
-      <!-- Title + favicon + original link -->
-      <div class="flex items-center mb-2 space-x-2">
-        {% if item.favicon_url %}
-          <img src="{{ item.favicon_url }}" alt="favicon" class="w-6 h-6">
-        {% endif %}
-        <h1 class="text-2xl sm:text-3xl font-bold leading-tight">
-          <a href="{{ item.url }}" target="_blank" rel="noopener"
-             class="hover:underline text-primary">
+    <div class="container mx-auto px-4 py-4 flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0">
+      <div>
+        <a href="/items" class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 mb-2 inline-block">
+          ← Back to all articles
+        </a>
+        <div class="flex items-center space-x-2">
+          {% if item.favicon_url %}
+            <img src="{{ item.favicon_url }}" alt="" class="w-6 h-6">
+          {% endif %}
+          <h1 class="text-2xl sm:text-3xl font-bold text-primary">
             {{ item.title }}
-          </a>
-        </h1>
+          </h1>
+        </div>
+        <p class="text-gray-600 dark:text-gray-400 text-sm sm:text-base mt-1">
+          By <strong>{{ item.author or "Unknown" }}</strong>
+          {% if item.publish_date_fmt %}| {{ item.publish_date_fmt }}{% endif %}
+          | {{ item.word_count }} words
+          | ~{{ item.reading_time_min }} min read
+        </p>
       </div>
-
-      <!-- Byline -->
-      <p class="text-gray-600 dark:text-gray-400 mb-4 text-sm sm:text-base">
-        By <strong>{{ item.author or "Unknown" }}</strong>
-        {% if item.publish_date %}| {{ item.publish_date }}{% endif %}
-        | {{ item.reading_time_min }} min read
-      </p>
-
-      <!-- Audio player & speed -->
-      <div class="space-y-2">
+      <div class="w-full md:w-auto space-y-2">
         <audio id="audio-player" controls class="w-full rounded-lg shadow-sm"
                src="{{ item.audio_url }}"></audio>
-
-        <div class="flex flex-wrap items-center space-x-2 text-sm">
-          <span>Speed:</span>
-          <button data-rate="0.75" class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">0.75×</button>
-          <button data-rate="1"    class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1×</button>
-          <button data-rate="1.25" class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1.25×</button>
-          <button data-rate="1.5"  class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1.5×</button>
+        <div class="flex items-center justify-between text-sm">
+          <div class="flex items-center space-x-2">
+            <span>Speed:</span>
+            <button data-rate="0.75" class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">0.75×</button>
+            <button data-rate="1"    class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1×</button>
+            <button data-rate="1.25" class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1.25×</button>
+            <button data-rate="1.5"  class="speed-btn px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">1.5×</button>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+          </div>
         </div>
-
         <progress id="audio-progress" value="0" max="100"
                   class="w-full h-2 rounded bg-gray-200 dark:bg-gray-700"></progress>
       </div>
-
     </div>
   </div>
 
-  <!-- Add a little top padding so nothing is hidden behind the sticky header -->
-  <div class="pt-6 container mx-auto px-4">
+  <div id="main-content" class="pt-6 container mx-auto px-4 space-y-6">
 
-    <!-- Metadata panel -->
-    <details class="mb-6 bg-white p-4 rounded shadow dark:bg-gray-800">
-      <summary class="cursor-pointer font-medium">Metadata</summary>
-      <ul class="mt-2 list-disc list-inside text-sm text-gray-700 dark:text-gray-300 space-y-1">
-        <li><strong>Original URL:</strong>
-          <a href="{{ item.url }}" target="_blank" rel="noopener"
-             class="text-primary hover:underline">{{ item.url }}</a>
-        </li>
-        <li><strong>Publish Date:</strong> {{ item.publish_date or "N/A" }}</li>
-        <li><strong>Last Modified:</strong> {{ item.last_modified or "N/A" }}</li>
-        <li><strong>ETag:</strong> {{ item.etag or "N/A" }}</li>
-        <li><strong>Tags:</strong>
-          {% if item.tags %}
-            {% for tag in item.tags %}
-              <span class="inline-block bg-gray-200 text-xs px-2 py-1 rounded mr-1 mb-1 dark:bg-gray-700">
-                {{ tag }}
-              </span>
-            {% endfor %}
-          {% else %}None{% endif %}
-        </li>
-      </ul>
-    </details>
-
-    <!-- Download link -->
-    <a href="{{ item.audio_url }}" download
-       class="inline-block text-primary hover:underline text-sm mb-4">
-      ⬇️ Download Audio
-    </a>
-
-    <!-- Font-size controls -->
-    <div class="flex items-center space-x-2 mb-6">
-      <span class="font-medium">Text size:</span>
-      <button id="font-small"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A-</button>
-      <button id="font-normal" class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A</button>
-      <button id="font-large"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A+</button>
+    {# Share buttons #}
+    <div class="flex flex-wrap items-center space-x-4 text-sm">
+      <button id="copy-article-url" class="flex items-center space-x-1 text-primary hover:underline">
+        <span>📋</span><span>Copy article URL</span>
+      </button>
+      <button id="copy-audio-url" class="flex items-center space-x-1 text-primary hover:underline">
+        <span>🎧</span><span>Copy audio link</span>
+      </button>
+      <button id="copy-feed-url" class="flex items-center space-x-1 text-primary hover:underline">
+        <span>🔗</span><span>Copy RSS feed URL</span>
+      </button>
     </div>
 
-    {# Build paragraph array #}
+    {# Metadata & Tags in a 2-col grid #}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <details class="bg-white p-4 rounded shadow dark:bg-gray-800">
+        <summary class="cursor-pointer font-medium">Metadata</summary>
+        <ul class="mt-2 list-disc list-inside text-sm text-gray-700 dark:text-gray-300 space-y-1">
+          <li><strong>Original URL:</strong>
+            <a href="{{ item.url }}" target="_blank" class="text-primary hover:underline">{{ item.url }}</a>
+          </li>
+          <li><strong>Publish Date:</strong> {{ item.publish_date_fmt or "N/A" }}</li>
+          <li><strong>Last Modified:</strong> {{ item.last_modified or "N/A" }}</li>
+          <li><strong>ETag:</strong> {{ item.etag or "N/A" }}</li>
+        </ul>
+      </details>
+      <div>
+        <label class="block font-medium mb-1">Tags:</label>
+        <div id="tags-display" class="flex flex-wrap space-x-2">
+          {% for tag in item.tags %}
+            <span class="bg-gray-200 text-sm px-2 py-1 rounded dark:bg-gray-700">{{ tag }}</span>
+          {% endfor %}
+          {% if not item.tags %}
+            <span class="text-gray-500">None</span>
+          {% endif %}
+        </div>
+        <button id="edit-tags-btn" class="mt-2 text-sm text-primary hover:underline">
+          ✏️ Edit Tags
+        </button>
+        <div id="tags-editor" class="mt-2 space-x-2 hidden">
+          <input type="text" id="tags-input"
+                 class="px-3 py-1 border rounded w-2/3 dark:bg-gray-700 dark:border-gray-600"
+                 value="{{ item.tags|join(',') }}"
+                 placeholder="comma,separated,tags">
+          <button id="save-tags-btn"
+                  class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
+            Save
+          </button>
+          <button id="cancel-tags-btn"
+                  class="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400 text-sm">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {# Download link & font-size controls #}
+    <div class="flex items-center justify-between space-x-4">
+      <a href="{{ item.audio_url }}" download class="text-primary hover:underline text-sm">
+        ⬇️ Download Audio
+      </a>
+      <div class="flex items-center space-x-2 text-sm">
+        <span class="font-medium">Text size:</span>
+        <button id="font-small"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A-</button>
+        <button id="font-normal" class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A</button>
+        <button id="font-large"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A+</button>
+      </div>
+    </div>
+
+    {# Split paragraphs #}
     {% set paras = item.text.split('\n\n') %}
     {% if paras|length <= 1 %}
       {% set paras = item.text.splitlines() %}
     {% endif %}
 
-    <!-- Full text with spacing -->
+    {# Article Text #}
     <article id="full-text"
              class="prose prose-lg max-w-none space-y-8 bg-white p-6 rounded shadow dark:prose-invert dark:bg-gray-800">
       {% for para in paras %}
@@ -100,65 +130,167 @@
         {% endif %}
       {% endfor %}
     </article>
-
-    <!-- Back link -->
-    <p class="mt-8">
-      <a href="/items" class="text-primary hover:underline">&larr; Back to all articles</a>
-    </p>
   </div>
+{% endblock %}
 
-  <!-- Page scripts -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const audio   = document.getElementById('audio-player'),
-            prog    = document.getElementById('audio-progress'),
-            paras   = Array.from(document.querySelectorAll('#full-text .paragraph')),
-            speeds  = document.querySelectorAll('.speed-btn');
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // DOM refs
+  const audio = document.getElementById('audio-player'),
+        prog  = document.getElementById('audio-progress'),
+        paras = Array.from(document.querySelectorAll('#full-text .paragraph')),
+        speeds = document.querySelectorAll('.speed-btn'),
+        curTimeEl = document.getElementById('current-time'),
+        totalTimeEl = document.getElementById('total-time'),
+        copyArticleBtn = document.getElementById('copy-article-url'),
+        copyAudioBtn = document.getElementById('copy-audio-url'),
+        copyFeedBtn = document.getElementById('copy-feed-url'),
+        articleUrl = "{{ item.url }}",
+        audioUrl = "{{ item.audio_url }}",
+        rssUrl = "{{ request.url_root }}feed.xml";
 
-      // Precompute thresholds based on character counts
-      const lengths = paras.map(p => p.textContent.length),
-            total   = lengths.reduce((a,b) => a+b, 0);
-      let accum = 0, thresholds = lengths.map(len => (accum += len) / total);
+  let boundaries = [], lastIdx = -1;
 
-      // Speed buttons
-      speeds.forEach(btn => btn.addEventListener('click', () => {
-        audio.playbackRate = +btn.dataset.rate;
-        speeds.forEach(b=>b.classList.remove('bg-primary'));
-        btn.classList.add('bg-primary');
-      }));
+  // Build character-length array including intro
+  const intro = `Title: {{ item.title }}. By {{ item.author or 'Unknown' }}. `,
+        lengths = [intro.length].concat(paras.map(p => p.textContent.length)),
+        totalLen = lengths.reduce((a,b) => a+b, 0);
 
-      // Highlight & scroll on timeupdate
-      audio.addEventListener('timeupdate', () => {
-        if (!audio.duration || thresholds.length < 2) {
-          prog.value = (audio.currentTime/audio.duration)*100;
-          return;
-        }
-        const pct = audio.currentTime / audio.duration;
-        let idx = thresholds.findIndex(t=>pct <= t);
-        if (idx < 0) idx = thresholds.length - 1;
-
-        paras.forEach((p,i) => {
-          if (i === idx) {
-            p.classList.add('bg-yellow-100','dark:bg-yellow-800','p-2','rounded');
-            p.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else {
-            p.classList.remove('bg-yellow-100','dark:bg-yellow-800','p-2','rounded');
-          }
-        });
-        prog.value = pct * 100;
-      });
-
-      // Seek on progress click
-      prog.addEventListener('click', e => {
-        const pct = e.offsetX / prog.offsetWidth;
-        audio.currentTime = pct * audio.duration;
-      });
-
-      // Font-size controls
-      const ft = document.getElementById('full-text');
-      document.getElementById('font-small').onclick  = () => ft.classList.replace('prose-lg','text-sm');
-      document.getElementById('font-normal').onclick = () => ft.classList.replace('text-sm','prose-lg');
-      document.getElementById('font-large').onclick  = () => ft.classList.replace('prose-lg','text-xl');
+  // Once metadata is loaded, compute time boundaries
+  audio.addEventListener('loadedmetadata', () => {
+    const dur = audio.duration;
+    let acc = 0;
+    boundaries = lengths.map(len => {
+      acc += len;
+      return (acc / totalLen) * dur;
     });
-  </script>
+    // display total time
+    const m = Math.floor(dur/60), s = Math.floor(dur%60).toString().padStart(2,'0');
+    totalTimeEl.textContent = `${m}:${s}`;
+  });
+
+  // Update current time display & highlight
+  audio.addEventListener('timeupdate', () => {
+    const t = audio.currentTime;
+    // update time display
+    const m = Math.floor(t/60), s = Math.floor(t%60).toString().padStart(2,'0');
+    curTimeEl.textContent = `${m}:${s}`;
+    // find paragraph index
+    let idx = boundaries.findIndex(b => t <= b);
+    if (idx <= 0) {
+      // intro / before first paragraph
+      paras.forEach(p => p.classList.remove('bg-yellow-100','dark:bg-yellow-800','p-2','rounded'));
+      lastIdx = -1;
+      prog.value = (t/audio.duration)*100;
+      return;
+    }
+    const pidx = idx - 1;
+    if (pidx !== lastIdx) {
+      paras.forEach((p,i) => {
+        const on = (i === pidx);
+        p.classList.toggle('bg-yellow-100', on);
+        p.classList.toggle('dark:bg-yellow-800', on);
+        p.classList.toggle('p-2', on);
+        p.classList.toggle('rounded', on);
+      });
+      paras[pidx].scrollIntoView({ behavior:'smooth', block:'center' });
+      lastIdx = pidx;
+    }
+    prog.value = (t/audio.duration)*100;
+  });
+
+  // Seek by clicking progress bar
+  prog.addEventListener('click', e => {
+    const pct = e.offsetX / prog.offsetWidth;
+    audio.currentTime = pct * audio.duration;
+  });
+
+  // Speed controls
+  speeds.forEach(btn => btn.addEventListener('click', () => {
+    audio.playbackRate = +btn.dataset.rate;
+    speeds.forEach(b=>b.classList.remove('bg-primary'));
+    btn.classList.add('bg-primary');
+  }));
+
+  // Copy to clipboard handlers
+  function copyText(txt, btn) {
+    navigator.clipboard.writeText(txt)
+      .then(() => btn.textContent = '✓ Copied')
+      .catch(() => btn.textContent = '✗ Failed')
+      .finally(() => setTimeout(() => btn.textContent = btn.dataset.label, 1500));
+  }
+  copyArticleBtn.dataset.label = copyArticleBtn.textContent;
+  copyAudioBtn.dataset.label = copyAudioBtn.textContent;
+  copyFeedBtn.dataset.label = copyFeedBtn.textContent;
+
+  copyArticleBtn.addEventListener('click', () => copyText(articleUrl, copyArticleBtn));
+  copyAudioBtn.addEventListener('click', () => copyText(audioUrl, copyAudioBtn));
+  copyFeedBtn.addEventListener('click', () => copyText(rssUrl, copyFeedBtn));
+
+  // Font-size controls
+  const ft = document.getElementById('full-text');
+  document.getElementById('font-small').onclick  = () => {
+    ft.classList.remove('prose-lg','text-xl'); ft.classList.add('text-sm');
+  };
+  document.getElementById('font-normal').onclick = () => {
+    ft.classList.remove('text-sm','text-xl'); ft.classList.add('prose-lg');
+  };
+  document.getElementById('font-large').onclick  = () => {
+    ft.classList.remove('prose-lg','text-sm'); ft.classList.add('text-xl');
+  };
+
+  // Tag-editing UI
+  const editBtn = document.getElementById('edit-tags-btn'),
+        editor  = document.getElementById('tags-editor'),
+        display = document.getElementById('tags-display'),
+        input   = document.getElementById('tags-input'),
+        saveBtn = document.getElementById('save-tags-btn'),
+        cancelBtn = document.getElementById('cancel-tags-btn'),
+        itemId = "{{ item.id }}";
+
+  editBtn.addEventListener('click', () => {
+    editor.classList.remove('hidden');
+    editBtn.classList.add('hidden');
+  });
+  cancelBtn.addEventListener('click', () => {
+    editor.classList.add('hidden');
+    editBtn.classList.remove('hidden');
+  });
+  saveBtn.addEventListener('click', async () => {
+    const tags = input.value.trim()
+      ? input.value.split(',').map(t=>t.trim()).filter(t=>t)
+      : [];
+    saveBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/items/${itemId}/tags`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({tags})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      // update UI
+      display.innerHTML = '';
+      if (data.tags.length) {
+        data.tags.forEach(t => {
+          const sp = document.createElement('span');
+          sp.className = 'bg-gray-200 text-sm px-2 py-1 rounded dark:bg-gray-700';
+          sp.textContent = t;
+          display.appendChild(sp);
+        });
+      } else {
+        display.textContent = 'None';
+        display.classList.add('text-gray-500');
+      }
+      editor.classList.add('hidden');
+      editBtn.classList.remove('hidden');
+    } catch (err) {
+      alert('Error updating tags: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+});
+</script>
 {% endblock %}

@@ -8,22 +8,22 @@
   <!-- Immediately apply persisted theme -->
   <script>
     try {
-      if (localStorage.theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch (_) {}
+      const t = localStorage.theme;
+      document.documentElement.classList.toggle('dark', t === 'dark');
+    } catch (e) { /* ignore */ }
   </script>
 
-  <!-- Tailwind + Typography plugin -->
-  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <!-- Tailwind + Typography + Forms -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
         extend: {
-          colors: { primary: '#2563eb' }
+          colors: { primary: '#2563eb' },
+        },
+        transitionProperty: {
+          'colors': 'color, background-color, border-color, text-decoration-color, fill, stroke'
         }
       }
     }
@@ -31,18 +31,40 @@
 
   <!-- Favicon -->
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+
+  {% block head %}{% endblock %}
 </head>
+
 <body class="min-h-screen bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors">
+
+  <!-- Skip to content -->
+  <a href="#main-content"
+     class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-white px-4 py-2 rounded">
+    Skip to content
+  </a>
 
   <!-- Navbar -->
   <nav class="bg-white shadow mb-8 dark:bg-gray-800">
     <div class="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center">
       <a href="/" class="flex items-center space-x-2 text-xl font-bold">
-        <span role="img" aria-label="mic">🎤</span><span>SpeakLoudTTS</span>
+        <span role="img" aria-label="mic">🎤</span>
+        <span>SpeakLoudTTS</span>
       </a>
       <div class="mt-2 sm:mt-0 flex items-center space-x-4">
-        <a href="/submit" class="hover:text-gray-900 dark:hover:text-white">Submit</a>
-        <a href="/items"  class="hover:text-gray-900 dark:hover:text-white">All Articles</a>
+        <a href="/submit"
+           class="hover:text-gray-900 dark:hover:text-white
+                  {% if request.path == '/submit' %}underline{% endif %}">
+          Submit
+        </a>
+        <a href="/items"
+           class="hover:text-gray-900 dark:hover:text-white
+                  {% if request.path.startswith('/items') %}underline{% endif %}">
+          All Articles
+        </a>
+        <a href="/feed.xml" title="RSS Feed"
+           class="hover:text-gray-900 dark:hover:text-white">
+          📰 Feed
+        </a>
         <button id="theme-toggle"
                 class="p-2 rounded bg-gray-200 dark:bg-gray-700 focus:outline-none"
                 aria-label="Toggle dark mode">🌓</button>
@@ -51,17 +73,21 @@
   </nav>
 
   <!-- Main -->
-  <main class="container mx-auto px-4">
+  <main id="main-content" class="container mx-auto px-4">
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Dark-mode script -->
+  <!-- Dark-mode toggle script -->
   <script>
-    document.getElementById('theme-toggle').addEventListener('click', () => {
-      const html = document.documentElement;
-      html.classList.toggle('dark');
-      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
-    });
+    document
+      .getElementById('theme-toggle')
+      .addEventListener('click', () => {
+        const html = document.documentElement;
+        html.classList.toggle('dark');
+        localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+      });
   </script>
+
+  {% block scripts %}{% endblock %}
 </body>
 </html>

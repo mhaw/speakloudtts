@@ -2,38 +2,42 @@
 {% block content %}
   <h2 class="text-2xl font-semibold mb-4">Processed Articles</h2>
 
-  <table class="w-full bg-white shadow rounded overflow-hidden">
-    <thead class="bg-gray-100">
+  <table class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
+    <thead class="bg-gray-100 dark:bg-gray-700">
       <tr class="text-left">
-        <th class="px-4 py-2">Title</th>
-        <th class="px-4 py-2">Author</th>
-        <th class="px-4 py-2">Date</th>
-        <th class="px-4 py-2">Words</th>
-        <th class="px-4 py-2">Read Time</th>
-        <th class="px-4 py-2">Audio</th>
-        <th class="px-4 py-2">Download</th>
-        <th class="px-4 py-2">Details</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Title</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Author</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Date</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Words</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Read Time</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Audio</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Download</th>
+        <th class="px-4 py-2 text-gray-800 dark:text-gray-100">Details</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
       {% for it in items %}
-      <tr class="border-t">
-        <td class="px-4 py-2">{{ it.title }}</td>
-        <td class="px-4 py-2">{{ it.author }}</td>
-        <td class="px-4 py-2">{{ it.date }}</td>
-        <td class="px-4 py-2">{{ it.word_count }}</td>
-        <td class="px-4 py-2">{{ it.reading_time }} min</td>
+      <tr class="bg-white dark:bg-gray-900">
+        <td class="px-4 py-2 text-gray-800 dark:text-gray-200">{{ it.title }}</td>
+        <td class="px-4 py-2 text-gray-800 dark:text-gray-200">{{ it.author }}</td>
+        <td class="px-4 py-2 text-gray-800 dark:text-gray-200">{{ it.date }}</td>
+        <td class="px-4 py-2 text-gray-800 dark:text-gray-200">{{ it.word_count }}</td>
+        <td class="px-4 py-2 text-gray-800 dark:text-gray-200">{{ it.reading_time }} min</td>
         <td class="px-4 py-2">
           <audio controls preload="none" class="w-36"
                  src="{{ it.audio_url }}"></audio>
         </td>
         <td class="px-4 py-2">
           <a href="{{ it.audio_url }}" download
-             class="text-blue-600 hover:underline">Download</a>
+             class="text-blue-600 hover:underline dark:text-blue-300">
+            Download
+          </a>
         </td>
         <td class="px-4 py-2">
           <a href="/items/{{ it.id }}"
-             class="text-indigo-600 hover:underline">View</a>
+             class="text-indigo-600 hover:underline dark:text-indigo-300">
+            View
+          </a>
         </td>
       </tr>
       {% endfor %}
