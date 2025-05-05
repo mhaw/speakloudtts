@@ -13,6 +13,7 @@ from newspaper import Article
 from flask import Flask, request, jsonify, render_template, Response
 from google.cloud import texttospeech, storage, firestore
 from feedgen.feed import FeedGenerator
+from tts import synthesize_long_text
 from readability import Document  # pip install readability-lxml
 
 # ─── Logging ────────────────────────────────────────────────────────────────────
@@ -135,44 +136,6 @@ def extract_article(url: str) -> dict:
         "last_modified": last_mod,
         "etag": etag,
     }
-
-# ─── Synthesize & Upload ───────────────────────────────────────────────────────
-def synthesize_long_text(text: str, title: str, author: str, item_id: str) -> str:
-    intro = f"Title: {title}. By {author}. "
-    full = intro + text
-
-    tmp = tempfile.gettempdir()
-    segs = []
-
-    for i in range(0, len(full), MAX_TTS_CHARS):
-        chunk = full[i : i + MAX_TTS_CHARS]
-        resp = tts_client.synthesize_speech(
-            input=texttospeech.SynthesisInput(text=chunk),
-            voice=VOICE_PARAMS,
-            audio_config=AUDIO_CONFIG,
-        )
-        path = os.path.join(tmp, f"{item_id}_{i}.mp3")
-        with open(path, "wb") as f:
-            f.write(resp.audio_content)
-        segs.append(path)
-
-    list_txt = os.path.join(tmp, f"{item_id}_list.txt")
-    with open(list_txt, "w") as f:
-        for p in segs:
-            f.write(f"file '{p}'\n")
-
-    merged = os.path.join(tmp, f"{item_id}_full.mp3")
-    subprocess.run(
-        ["ffmpeg","-y","-loglevel","error","-f","concat","-safe","0",
-         "-i",list_txt,"-c","copy",merged],
-        check=True
-    )
-
-    blob = bucket.blob(f"{item_id}.mp3")
-    blob.upload_from_filename(merged, content_type="audio/mpeg")
-    uri = f"https://storage.googleapis.com/{GCS_BUCKET}/{item_id}.mp3"
-    logger.info("Uploaded MP3 to %s", uri)
-    return uri
 
 # ─── Flask App & Routes ─────────────────────────────────────────────────────────
 app = Flask(__name__)
