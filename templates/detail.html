@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2 class="text-3xl font-bold mb-4">{{ item.title }}</h2>
+  <p class="text-gray-600 mb-2">
+    By <strong>{{ item.author or "Unknown" }}</strong>
+    {% if item.publish_date %}| {{ item.publish_date }}{% endif %}
+    | {{ item.reading_time_min }} min read
+  </p>
+
+  <div class="mb-4">
+    {% if item.tags %}
+      {% for tag in item.tags %}
+        <span class="inline-block bg-gray-200 text-sm px-2 py-1 rounded mr-2">{{ tag }}</span>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  <div class="mb-6">
+    <audio controls class="w-full" src="{{ item.audio_url }}"></audio>
+    <a href="{{ item.audio_url }}" download
+       class="inline-block mt-2 text-blue-600 hover:underline">
+      ⬇️ Download Audio
+    </a>
+  </div>
+
+  <h3 class="text-2xl font-semibold mb-2">Full Text</h3>
+  <div class="whitespace-pre-wrap bg-white p-4 rounded shadow mb-8">
+    {{ item.text }}
+  </div>
+
+  <p><a href="/items" class="text-indigo-600 hover:underline">← Back to all articles</a></p>
+{% endblock %}
