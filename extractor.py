@@ -46,10 +46,19 @@ def extract_article(url: str) -> dict:
     # 2) newspaper fallback
     if not text or len(text) < 200:
         logger.info("Trafilatura fail → newspaper3k")
-        art = Article(url, browser_user_agent=USER_AGENT)
-        art.download(); art.parse()
-        text = art.text or ""
-        source = "newspaper3k"
+        try:
+            from newspaper import Article, Config
+            cfg = Config()
+            cfg.browser_user_agent = USER_AGENT
+            cfg.request_timeout    = 15
+            cfg.fetch_images       = False
+            art = Article(url, config=cfg)
+            art.download(); art.parse()
+            text = art.text or ""
+            source = "newspaper3k"
+        except Exception as e:
+            logger.warning("newspaper3k extraction failed: %s", e)
+            text = ""
 
     # 3) readability fallback
     if not text or len(text) < 200:
