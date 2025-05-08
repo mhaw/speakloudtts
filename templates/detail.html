@@ -1,7 +1,6 @@
 {% extends "base.html" %}
-
 {% block content %}
-  <!-- Sticky header with back link, title, byline, audio & controls -->
+  <!-- Sticky header with navigation, title, byline & audio -->
   <div class="sticky top-0 bg-white dark:bg-gray-900 z-30 border-b border-gray-200 dark:border-gray-700">
     <div class="container mx-auto px-4 py-4 flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0">
       <div>
@@ -24,8 +23,7 @@
         </p>
       </div>
       <div class="w-full md:w-auto space-y-2">
-        <audio id="audio-player" controls class="w-full rounded-lg shadow-sm"
-               src="{{ item.audio_url }}"></audio>
+        <audio id="audio-player" controls class="w-full rounded-lg shadow-sm" src="{{ item.audio_url }}"></audio>
         <div class="flex items-center justify-between text-sm">
           <div class="flex items-center space-x-2">
             <span>Speed:</span>
@@ -46,8 +44,20 @@
 
   <div id="main-content" class="pt-6 container mx-auto px-4 space-y-6">
 
-    <!-- Share buttons -->
-    <div class="flex flex-wrap items-center space-x-4 text-sm">
+    <!-- Download & Copy controls -->
+    <div class="flex space-x-4 mb-4 text-sm">
+      <a href="/items/{{ item.id }}/text"
+         class="text-primary hover:underline"
+         download="{{ item.id }}.txt">
+        📄 Download Transcript
+      </a>
+      <button id="copy-transcript" class="text-primary hover:underline">
+        📋 Copy Transcript
+      </button>
+    </div>
+
+    <!-- Share buttons, metadata & tags as before... -->
+    <div class="flex flex-wrap items-center space-x-4 text-sm mb-4">
       <button id="copy-article-url" class="flex items-center space-x-1 text-primary hover:underline">
         <span>📋</span><span>Copy article URL</span>
       </button>
@@ -59,8 +69,8 @@
       </button>
     </div>
 
-    <!-- Metadata & Tags -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Metadata & Tags panel -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
       <details class="bg-white p-4 rounded shadow dark:bg-gray-800">
         <summary class="cursor-pointer font-medium">Metadata</summary>
         <ul class="mt-2 list-disc list-inside text-sm text-gray-700 dark:text-gray-300 space-y-1">
@@ -102,26 +112,19 @@
       </div>
     </div>
 
-    <!-- Download link & font-size controls -->
-    <div class="flex items-center justify-between space-x-4">
-      <a href="{{ item.audio_url }}" download class="text-primary hover:underline text-sm">
-        ⬇️ Download Audio
-      </a>
-      <div class="flex items-center space-x-2 text-sm">
-        <span class="font-medium">Text size:</span>
-        <button id="font-small"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A-</button>
-        <button id="font-normal" class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A</button>
-        <button id="font-large"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A+</button>
-      </div>
+    <!-- Font-size controls -->
+    <div class="flex items-center justify-end space-x-2 mb-4 text-sm">
+      <span class="font-medium">Text size:</span>
+      <button id="font-small"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A-</button>
+      <button id="font-normal" class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A</button>
+      <button id="font-large"  class="px-2 py-1 bg-gray-200 rounded dark:bg-gray-700">A+</button>
     </div>
 
-    <!-- Split into paragraphs -->
+    <!-- Paragraph split & rendering -->
     {% set paras = item.text.split('\n\n') %}
     {% if paras|length <= 1 %}
       {% set paras = item.text.splitlines() %}
     {% endif %}
-
-    <!-- Article Text -->
     <article id="full-text"
              class="prose prose-lg max-w-none space-y-8 bg-white p-6 rounded shadow dark:prose-invert dark:bg-gray-800">
       {% for para in paras %}
@@ -136,122 +139,88 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // DOM refs
-  const audio = document.getElementById('audio-player'),
-        prog  = document.getElementById('audio-progress'),
-        paras = Array.from(document.querySelectorAll('#full-text .paragraph')),
-        speeds = Array.from(document.querySelectorAll('.speed-btn')),
-        curTimeEl = document.getElementById('current-time'),
-        totalTimeEl = document.getElementById('total-time');
+  const audio        = document.getElementById('audio-player'),
+        prog         = document.getElementById('audio-progress'),
+        paras        = Array.from(document.querySelectorAll('#full-text .paragraph')),
+        speeds       = Array.from(document.querySelectorAll('.speed-btn')),
+        curTimeEl    = document.getElementById('current-time'),
+        totalTimeEl  = document.getElementById('total-time'),
+        copyTransBtn = document.getElementById('copy-transcript'),
+        transcript   = paras.map(p => p.textContent).join('\n\n'),
+        storageKey   = 'playbackPos-{{ item.id }}';
 
-  // build speed options array
-  const rateOptions = speeds.map(b => parseFloat(b.dataset.rate));
-
-  // helper to set speed
-  function setSpeed(rate) {
-    audio.playbackRate = rate;
-    localStorage.setItem('playbackRate', rate);
-    speeds.forEach(btn => {
-      btn.classList.toggle('bg-primary', parseFloat(btn.dataset.rate) === rate);
-    });
-  }
-
-  // apply saved speed (or default 1×)
-  const saved = parseFloat(localStorage.getItem('playbackRate'));
-  setSpeed(rateOptions.includes(saved) ? saved : 1);
-
-  // wire up speed buttons
-  speeds.forEach(btn => {
-    btn.addEventListener('click', () => setSpeed(parseFloat(btn.dataset.rate)));
-  });
-
-  // compute paragraph time‐boundaries once metadata loads
   let boundaries = [], lastIdx = -1;
+
+  // Resume from last position
   audio.addEventListener('loadedmetadata', () => {
-    const dur = audio.duration;
-    // include intro length (we skip highlighting intro)
+    const saved = parseFloat(localStorage.getItem(storageKey));
+    if (!isNaN(saved) && saved > 0 && saved < audio.duration - 1) {
+      audio.currentTime = saved;
+    }
+    // compute boundaries for paragraph-highlight
     const introLen = (`Title: {{ item.title }}. By {{ item.author or 'Unknown' }}.`).length;
-    const lengths = paras.map(p => p.textContent.length);
-    const totalLen = introLen + lengths.reduce((s,n)=>s+n,0);
+    const lens = paras.map(p => p.textContent.length);
+    const totalLen = introLen + lens.reduce((a,b)=>a+b,0);
     let acc = introLen;
-    boundaries = lengths.map(len => {
-      const t = (acc/totalLen)*dur;
+    boundaries = lens.map(len => {
+      const t = (acc/totalLen)*audio.duration;
       acc += len;
       return t;
     });
-    // show total time
-    const m = Math.floor(dur/60), s = Math.floor(dur%60).toString().padStart(2,'0');
+    const m = Math.floor(audio.duration/60),
+          s = String(Math.floor(audio.duration%60)).padStart(2,'0');
     totalTimeEl.textContent = `${m}:${s}`;
   });
 
-  // update progress & highlight
+  // Save position & highlight
   audio.addEventListener('timeupdate', () => {
-    const t = audio.currentTime, pct = t/audio.duration*100;
-    prog.value = pct;
-    // find paragraph index
+    const t = audio.currentTime;
+    localStorage.setItem(storageKey, t);
+    prog.value = (t/audio.duration)*100;
+    // highlight paragraph
     let idx = boundaries.findIndex(b => t <= b);
     if (idx < 0) idx = boundaries.length - 1;
     if (idx !== lastIdx) {
       paras.forEach((p,i) => {
-        const on = i === idx;
+        const on = (i === idx);
         p.classList.toggle('bg-yellow-100', on);
         p.classList.toggle('dark:bg-yellow-800', on);
         p.classList.toggle('p-2', on);
         p.classList.toggle('rounded', on);
       });
-      if (idx >= 0) paras[idx].scrollIntoView({ behavior:'smooth', block:'center' });
+      if (idx>=0) paras[idx].scrollIntoView({behavior:'smooth', block:'center'});
       lastIdx = idx;
     }
-    // update current time
-    const m = Math.floor(t/60), s = Math.floor(t%60).toString().padStart(2,'0');
+    const m = Math.floor(t/60),
+          s = String(Math.floor(t%60)).padStart(2,'0');
     curTimeEl.textContent = `${m}:${s}`;
   });
 
-  // progress bar seek
+  // Seek bar
   prog.addEventListener('click', e => {
     const pct = e.offsetX / prog.offsetWidth;
     audio.currentTime = pct * audio.duration;
   });
 
-  // keyboard shortcuts
-  document.addEventListener('keydown', e => {
-    // avoid when typing in inputs
-    if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
-    switch (e.code) {
-      case 'Space':
-        e.preventDefault();
-        audio.paused ? audio.play() : audio.pause();
-        break;
-      case 'ArrowRight':
-        audio.currentTime = Math.min(audio.currentTime + 10, audio.duration);
-        break;
-      case 'ArrowLeft':
-        audio.currentTime = Math.max(audio.currentTime - 10, 0);
-        break;
-      case 'ArrowUp':
-        audio.volume = Math.min(audio.volume + 0.1, 1);
-        break;
-      case 'ArrowDown':
-        audio.volume = Math.max(audio.volume - 0.1, 0);
-        break;
-      case 'Period': // '>' key
-        {
-          const cur = audio.playbackRate;
-          const i = rateOptions.indexOf(cur);
-          if (i < rateOptions.length-1) setSpeed(rateOptions[i+1]);
-        }
-        break;
-      case 'Comma': // '<' key
-        {
-          const cur = audio.playbackRate;
-          const i = rateOptions.indexOf(cur);
-          if (i > 0) setSpeed(rateOptions[i-1]);
-        }
-        break;
-    }
+  // Speed buttons
+  function setSpeed(r) {
+    audio.playbackRate = r;
+    speeds.forEach(b=>b.classList.toggle('bg-primary', +b.dataset.rate===r));
+    localStorage.setItem('playbackRate',''+r);
+  }
+  const savedRate = parseFloat(localStorage.getItem('playbackRate'));
+  setSpeed(isNaN(savedRate)?1:savedRate);
+  speeds.forEach(btn => btn.addEventListener('click', ()=>setSpeed(+btn.dataset.rate)));
+
+  // Copy transcript
+  copyTransBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(transcript)
+      .then(() => copyTransBtn.textContent = '✓ Copied')
+      .catch(() => copyTransBtn.textContent = '✗ Failed')
+      .finally(() => setTimeout(() => copyTransBtn.textContent = '📋 Copy Transcript', 1500));
   });
 
-  // ... (your existing share buttons, tag editor, font-size code here) ...
+  // (Your existing share-URL, tag editing and font-size code goes here...)
 });
 </script>
 {% endblock %}

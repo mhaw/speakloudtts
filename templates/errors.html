@@ -3,7 +3,7 @@
 {% block content %}
   <h2 class="text-2xl font-semibold mb-4">Failed Articles</h2>
 
-  <!-- Search / Filter -->
+  <!-- Filter -->
   <div class="flex mb-4 space-x-2">
     <input
       id="search-input"
@@ -19,37 +19,44 @@
     >✕</button>
   </div>
 
-  <!-- Error table -->
+  <!-- Errors table -->
   <div class="overflow-x-auto">
     <table class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
       <thead class="bg-gray-100 dark:bg-gray-700">
         <tr class="text-left text-sm text-gray-700 dark:text-gray-300">
           <th class="px-4 py-2">URL</th>
           <th class="px-4 py-2">Title</th>
-          <th class="px-4 py-2">Failed At</th>
-          <th class="px-4 py-2">Error Message</th>
+          <th class="px-4 py-2">When</th>
+          <th class="px-4 py-2">Error</th>
           <th class="px-4 py-2 text-center">Actions</th>
         </tr>
       </thead>
       <tbody id="errors-body" class="divide-y divide-gray-200 dark:divide-gray-700">
         {% for doc in errors %}
-        <tr class="bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-200">
+        <tr data-id="{{ doc.id }}" class="bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-200">
           <td class="px-4 py-2 break-all">{{ doc.url }}</td>
-          <td class="px-4 py-2">{{ doc.title or "Unknown" }}</td>
-          <td class="px-4 py-2">{{ doc.failed_at_fmt }}</td>
+          <td class="px-4 py-2">{{ doc.title or "—" }}</td>
+          <td class="px-4 py-2">{{ doc.submitted_at or "—" }}</td>
           <td class="px-4 py-2 truncate max-w-xs" title="{{ doc.error }}">{{ doc.error }}</td>
           <td class="px-4 py-2">
             <div class="flex flex-col items-center space-y-1">
               <button
-                class="retry-btn px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
-                data-id="{{ doc.id }}"
-              >🔄 Retry</button>
-              <span class="status-msg text-xs mt-1"></span>
+                class="retry-btn flex items-center px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
+              >
+                <svg class="retry-spinner hidden animate-spin h-4 w-4 mr-1 text-white" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10"
+                          stroke="currentColor" stroke-width="4" fill="none"/>
+                  <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                <span class="retry-text">Retry</span>
+              </button>
+              <span class="status-msg text-xs"></span>
               <div class="flex space-x-2 mt-1">
                 <a href="{{ doc.url }}" target="_blank"
-                   class="text-indigo-600 hover:underline text-xs">🔗 Open</a>
+                   class="text-indigo-600 hover:underline text-xs">Open</a>
                 <a href="/items/{{ doc.id }}"
-                   class="text-indigo-600 hover:underline text-xs">👁️ View</a>
+                   class="text-indigo-600 hover:underline text-xs">View</a>
               </div>
             </div>
           </td>
@@ -63,47 +70,75 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const body        = document.getElementById('errors-body'),
-        retryBtns   = body.querySelectorAll('.retry-btn'),
-        searchInput = document.getElementById('search-input'),
-        clearBtn    = document.getElementById('clear-search');
+  const body        = document.getElementById('errors-body');
+  const searchInput = document.getElementById('search-input');
+  const clearBtn    = document.getElementById('clear-search');
 
-  // Helper to filter rows
+  // Filtering
   function filterRows() {
     const q = searchInput.value.trim().toLowerCase();
     clearBtn.disabled = !q;
     body.querySelectorAll('tr').forEach(row => {
-      const url   = row.children[0].textContent.toLowerCase(),
-            title = row.children[1].textContent.toLowerCase();
-      row.style.display = (url.includes(q) || title.includes(q)) ? '' : 'none';
+      const txt = row.textContent.toLowerCase();
+      row.style.display = txt.includes(q) ? '' : 'none';
     });
   }
   searchInput.addEventListener('input', filterRows);
   clearBtn.addEventListener('click', () => {
     searchInput.value = '';
-    clearBtn.disabled = true;
     filterRows();
   });
 
-  // Retry handler
-  retryBtns.forEach(btn => {
-    const statusEl = btn.parentElement.querySelector('.status-msg');
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      statusEl.textContent = '⏳ retrying…';
-      try {
-        const res = await fetch(`/api/items/${btn.dataset.id}/retry`, { method: 'POST' });
-        if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-        statusEl.textContent = '✅ done';
-        btn.textContent = '✅';
-      } catch (err) {
-        statusEl.textContent = '⚠️ failed';
-        statusEl.classList.add('text-red-600');
-        btn.textContent = '⚠️';
-      } finally {
-        btn.disabled = false;
+  // Retry + polling
+  body.addEventListener('click', async e => {
+    if (!e.target.closest('.retry-btn')) return;
+    const btn      = e.target.closest('.retry-btn');
+    const row      = btn.closest('tr');
+    const id       = row.dataset.id;
+    const spinner  = btn.querySelector('.retry-spinner');
+    const txt      = btn.querySelector('.retry-text');
+    const msgEl    = row.querySelector('.status-msg');
+
+    // UI lock
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+    txt.textContent = 'Retrying…';
+    msgEl.textContent = '';
+
+    try {
+      // kick off retry
+      let res = await fetch(`/api/items/${id}/retry`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+
+      msgEl.textContent = '⏳ Processing…';
+      // now poll status every 2s
+      for (let i=0; i<30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        res = await fetch(`/api/items/${id}`);
+        if (!res.ok) throw new Error('Item not found');
+        const data = await res.json();
+        if (data.status === 'done') {
+          // slide out & remove row
+          row.style.transition = 'opacity .5s';
+          row.style.opacity = 0;
+          setTimeout(() => row.remove(), 500);
+          return;
+        }
+        if (data.status === 'error') {
+          msgEl.textContent = '⚠️ Failed again';
+          throw new Error(data.error || 'Unknown error');
+        }
+        // still pending
       }
-    });
+      msgEl.textContent = '⏰ Timed out';
+    } catch (err) {
+      console.error(err);
+      msgEl.textContent = '⚠️ ' + err.message;
+    } finally {
+      btn.disabled = false;
+      spinner.classList.add('hidden');
+      txt.textContent = 'Retry';
+    }
   });
 });
 </script>

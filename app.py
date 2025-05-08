@@ -30,7 +30,7 @@ ALLOWED_VOICES = [
 ]
 DEFAULT_VOICE  = ALLOWED_VOICES[0]
 
-# ─── Firestore client & Flask app ───────────────────────────────────
+# ─── Firestore & Flask Init ──────────────────────────────────────────
 db  = firestore.Client()
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
@@ -62,65 +62,62 @@ def submit_url():
 
     payload = request.get_json(silent=True) or {}
     url      = payload.get("url") or request.form.get("url", "")
-    voice    = payload.get("voice") or request.form.get("voice") or DEFAULT_VOICE
-
-    if not url:
-        return jsonify({"error": "url is required"}), 400
+    voice    = payload.get("voice_name") \
+               or payload.get("voice") \
+               or request.form.get("voice") \
+               or DEFAULT_VOICE
     if voice not in ALLOWED_VOICES:
         voice = DEFAULT_VOICE
 
-    logger.info("New submission: %s (voice=%s)", url, voice)
+    if not url:
+        return jsonify({"error": "url is required"}), 400
 
+    logger.info("New submission: %s (voice=%s)", url, voice)
     try:
         meta = extract_article(url)
     except Exception as e:
         logger.exception("Extraction failed")
         return jsonify({"error": "extraction failed", "detail": str(e)}), 500
 
+    # Save initial record
     doc_ref = db.collection("items").document()
     item_id = doc_ref.id
     record = {
         **meta,
-        "url":          url,
-        "voice":        voice,
-        "status":       "pending",
-        "submitted_at": datetime.utcnow().isoformat(),
-        "submitted_ip": request.remote_addr,
-        "created_at":   firestore.SERVER_TIMESTAMP,
+        "url":            url,
+        "voice":          voice,
+        "status":         "pending",
+        "submitted_at":   datetime.utcnow().isoformat(),
+        "submitted_ip":   request.remote_addr,
+        "created_at":     firestore.SERVER_TIMESTAMP,
     }
     doc_ref.set(record)
-    logger.info("Saved record %s", item_id)
 
+    # Kick off TTS and upload
     try:
-        # ← pass `voice` into your TTS function
-        tts_uri = synthesize_long_text(
+        result = synthesize_long_text(
             meta["title"],
             meta["author"],
             meta["text"],
             item_id,
             voice
         )
-        doc_ref.update({
-            "status":  "done",
-            "tts_uri": tts_uri,
-        })
+        tts_uri = result["uri"]
+        doc_ref.update({"status": "done", "tts_uri": tts_uri})
     except Exception as e:
         logger.exception("TTS/upload error")
-        doc_ref.update({
-            "status": "error",
-            "error":  str(e),
-        })
-        return jsonify({"error":"tts failed","detail":str(e)}), 500
+        doc_ref.update({"status": "error", "error": str(e)})
+        return jsonify({"error": "tts failed", "detail": str(e)}), 500
 
     return jsonify({"item_id": item_id, "tts_uri": tts_uri}), 202
 
 
-# ─── JSON API: recent items ────────────────────────────────────────────
+# ─── Recent Items API ─────────────────────────────────────────────────
 @app.route("/api/recent", methods=["GET"])
 def api_recent():
     docs = (
         db.collection("items")
-          .where("status","==","done")
+          .where("status", "==", "done")
           .order_by("created_at", firestore.Query.DESCENDING)
           .limit(5)
           .stream()
@@ -136,77 +133,81 @@ def api_recent():
     return jsonify(out), 200
 
 
-# ─── JSON API: update tags ─────────────────────────────────────────────
+# ─── Update Tags API ───────────────────────────────────────────────────
 @app.route("/api/items/<item_id>/tags", methods=["PUT"])
 def update_tags(item_id):
     payload = request.get_json(silent=True) or {}
     tags    = payload.get("tags")
     if not isinstance(tags, list):
-        return jsonify({"error":"Request must be JSON {tags:[...]}"},),400
+        return jsonify({"error": "Request must be JSON {tags:[...]}"}), 400
 
     doc_ref = db.collection("items").document(item_id)
     if not doc_ref.get().exists:
-        return jsonify({"error":"Item not found"}),404
+        return jsonify({"error": "Item not found"}), 404
 
-    doc_ref.update({"tags":tags})
-    return jsonify({"id":item_id,"tags":tags}),200
+    doc_ref.update({"tags": tags})
+    return jsonify({"id": item_id, "tags": tags}), 200
 
 
-# ─── Error list page ───────────────────────────────────────────────────
+# ─── Errors List Page ─────────────────────────────────────────────────
 @app.route("/errors", methods=["GET"])
 def list_errors():
-    # no `order_by` → no composite-index error
+    # pull all items with status=error (no index required)
     docs = db.collection("items") \
-             .where("status","==","error") \
+             .where("status", "==", "error") \
              .stream()
+
     errors = []
     for d in docs:
         data = d.to_dict()
         errors.append({
             "id":           d.id,
-            "url":          data.get("url",""),
-            "submitted_at": data.get("submitted_at",""),
-            "error":        data.get("error","<no message>")
+            "url":          data.get("url", ""),
+            "title":        data.get("title", "<no title>"),
+            "submitted_at": data.get("submitted_at", ""),
+            "error":        data.get("error", "<no message>"),
         })
+
     return render_template("errors.html", errors=errors)
+
 
 @app.route("/api/items/<item_id>/retry", methods=["POST"])
 def retry_item(item_id):
-    doc = db.collection("items").document(item_id)
-    if not doc.get().exists:
+    doc_ref = db.collection("items").document(item_id)
+    if not doc_ref.get().exists:
         return jsonify({"error": "Not found"}), 404
 
-    # reset its status & error fields
-    doc.update({
-      "status": "pending",
-      "error": firestore.DELETE_FIELD,
-      "created_at": firestore.SERVER_TIMESTAMP
+    # reset status
+    doc_ref.update({
+        "status":     "pending",
+        "error":      firestore.DELETE_FIELD,
+        "created_at": firestore.SERVER_TIMESTAMP
     })
 
-    # kick off background re-processing (in‐process for now)
-    record = doc.get().to_dict()
+    record = doc_ref.get().to_dict()
     try:
-        tts_uri = synthesize_long_text(
-            record["text"],
+        result = synthesize_long_text(
             record["title"],
             record["author"],
+            record["text"],
             item_id,
-            voice_name=record.get("voice_name", DEFAULT_VOICE)
+            record.get("voice", DEFAULT_VOICE)
         )
-        doc.update({"status":"done","tts_uri": tts_uri})
+        tts_uri = result["uri"]
+        doc_ref.update({"status": "done", "tts_uri": tts_uri})
     except Exception as e:
-        doc.update({"status":"error","error": str(e)})
+        doc_ref.update({"status": "error", "error": str(e)})
         return jsonify({"error": str(e)}), 500
 
-    return jsonify({"status":"requeued"}), 202
+    return jsonify({"status": "requeued"}), 202
 
 
-# ─── Server-rendered list view ────────────────────────────────────────
+# ─── Server-Rendered List & Detail ────────────────────────────────────
 @app.route("/items", methods=["GET"])
 def list_items():
     docs = (
         db.collection("items")
-          .where("status","==","done")
+          .where("status", "==", "done")
           .order_by("created_at", firestore.Query.DESCENDING)
           .stream()
     )
@@ -214,20 +215,19 @@ def list_items():
     for d in docs:
         data = d.to_dict()
         items.append({
-            "id":           d.id,
-            "title":        data.get("title",""),
-            "author":       data.get("author",""),
-            "date":         data.get("publish_date",""),
-            "word_count":   data.get("word_count",0),
-            "reading_time": data.get("reading_time_min",0),
-            "voice":        data.get("voice", DEFAULT_VOICE),
-            "audio_url":    f"https://storage.googleapis.com/{GCS_BUCKET}/{d.id}.mp3",
-            "tags":         data.get("tags",[]),
+            "id":             d.id,
+            "title":          data.get("title", ""),
+            "author":         data.get("author", ""),
+            "date":           data.get("publish_date", ""),
+            "word_count":     data.get("word_count", 0),
+            "reading_time":   data.get("reading_time_min", 0),
+            "voice":          data.get("voice", DEFAULT_VOICE),
+            "audio_url":      f"https://storage.googleapis.com/{GCS_BUCKET}/{d.id}.mp3",
+            "tags":           data.get("tags", []),
         })
     return render_template("items.html", items=items)
 
 
-# ─── Detail view ───────────────────────────────────────────────────────
 @app.route("/items/<item_id>", methods=["GET"])
 def item_detail(item_id):
     doc = db.collection("items").document(item_id).get()
@@ -235,18 +235,18 @@ def item_detail(item_id):
         abort(404)
 
     data = doc.to_dict()
-    raw  = data.get("publish_date","")
+    raw  = data.get("publish_date", "")
     try:
         dt       = dateparser.isoparse(raw)
         date_fmt = dt.strftime("%B %d, %Y")
-    except:
+    except Exception:
         date_fmt = raw or ""
 
     return render_template("detail.html", item={
         **data,
-        "id":               item_id,
-        "audio_url":        f"https://storage.googleapis.com/{GCS_BUCKET}/{item_id}.mp3",
-        "publish_date_fmt": date_fmt,
+        "id":                item_id,
+        "audio_url":         f"https://storage.googleapis.com/{GCS_BUCKET}/{item_id}.mp3",
+        "publish_date_fmt":  date_fmt,
     })
 
 
@@ -257,10 +257,10 @@ def rss_feed():
     return Response(xml, mimetype="application/rss+xml")
 
 
-# ─── Health check ─────────────────────────────────────────────────────
+# ─── Health Check ─────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status":"ok"}),200
+    return jsonify({"status": "ok"}), 200
 
 
 # ─── Main ──────────────────────────────────────────────────────────────
