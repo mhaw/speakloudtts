@@ -3,13 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SpeakLoudTTS</title>
+  <title>{% block title %}SpeakLoudTTS{% endblock %}</title>
 
   <!-- Immediately apply persisted or system theme -->
   <script>
     try {
       const stored = localStorage.theme;
-      // If user has explicitly set theme to dark, or no choice but system prefers dark:
       if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
       } else {
@@ -48,6 +47,22 @@
     Skip to content
   </a>
 
+  <!-- Contextual Help Overlay -->
+  <div id="help-overlay"
+       class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-lg w-full">
+      <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Welcome to SpeakLoudTTS</h2>
+      <p class="mb-4 text-gray-700 dark:text-gray-300">
+        Tap the 🎤 logo to return home, use the menu buttons to navigate,
+        and on article pages you'll see playback controls with skip buttons.
+      </p>
+      <button id="help-close"
+              class="mt-2 px-4 py-2 bg-primary text-white rounded hover:bg-blue-700">
+        Got it!
+      </button>
+    </div>
+  </div>
+
   <!-- Navbar -->
   <nav class="bg-white shadow mb-8 dark:bg-gray-800">
     <div class="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center">
@@ -57,23 +72,29 @@
       </a>
       <div class="mt-2 sm:mt-0 flex items-center space-x-4">
         <a href="/submit"
-           class="hover:text-gray-900 dark:hover:text-white
-                  {% if request.path == '/submit' %}underline{% endif %}">
+           class="hover:text-gray-900 dark:hover:text-white {% if request.path == '/submit' %}underline{% endif %}">
           Submit
         </a>
         <a href="/items"
-           class="hover:text-gray-900 dark:hover:text-white
-                  {% if request.path.startswith('/items') %}underline{% endif %}">
+           class="hover:text-gray-900 dark:hover:text-white {% if request.path.startswith('/items') %}underline{% endif %}">
           All Articles
         </a>
         <a href="/feed.xml" title="RSS Feed"
            class="hover:text-gray-900 dark:hover:text-white">
           📰 Feed
         </a>
-        <a href="/errors" class="hover:text-gray-900 dark:hover:text-white">Errors</a>
+        <a href="/errors"
+           class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/errors' %}underline{% endif %}">
+          ⚠️ Errors
+        </a>
+        <button id="help-toggle"
+                class="p-2 rounded bg-gray-200 dark:bg-gray-700 focus:outline-none"
+                aria-label="Show help">❔
+        </button>
         <button id="theme-toggle"
                 class="p-2 rounded bg-gray-200 dark:bg-gray-700 focus:outline-none"
-                aria-label="Toggle dark mode">🌓</button>
+                aria-label="Toggle dark mode">🌓
+        </button>
       </div>
     </div>
   </nav>
@@ -83,15 +104,40 @@
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Dark-mode toggle script -->
+  <!-- Global scripts -->
   <script>
+    // Dark-mode toggle
     document.getElementById('theme-toggle').addEventListener('click', () => {
       const html = document.documentElement;
       html.classList.toggle('dark');
       localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
     });
+
+    // Contextual help toggle
+    document.getElementById('help-toggle').addEventListener('click', () => {
+      document.getElementById('help-overlay').classList.remove('hidden');
+    });
+    document.getElementById('help-close').addEventListener('click', () => {
+      document.getElementById('help-overlay').classList.add('hidden');
+      localStorage.setItem('helpSeen', 'true');
+    });
+
+    // On first visit, show help overlay
+    window.addEventListener('load', () => {
+      if (!localStorage.getItem('helpSeen')) {
+        document.getElementById('help-overlay').classList.remove('hidden');
+      }
+    });
+
+    // Service Worker registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .catch(err => console.warn('SW registration failed:', err));
+    }
   </script>
 
+  <!-- App-specific JS -->
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

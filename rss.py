@@ -1,31 +1,35 @@
 # rss.py
+
 import os
 import logging
 from datetime import datetime, timezone
 from dateutil import parser as dateparser
 
 from feedgen.feed import FeedGenerator
-from google.cloud import firestore
+from google.cloud import firestore, storage
 
 logger = logging.getLogger("rss")
 
 def generate_feed(request_url_root: str, bucket_name: str = None) -> str:
     """
     Builds an RSS 2.0 feed of all 'done' items in Firestore,
-    sorted by the original publish_date, and returns it as a
-    UTF-8 string.
+    sorted by their original publish_date, and returns it as a UTF-8 string.
     """
+    # allow override via env
     if bucket_name is None:
         bucket_name = os.getenv("GCS_BUCKET_NAME", "speakloudtts-audio-files")
 
+    # Firestore + Storage clients
     db = firestore.Client()
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
 
-    # 1) Grab all done items (no ordering index required)
+    # 1) Fetch all 'done' items
     docs = db.collection("items") \
              .where("status", "==", "done") \
              .stream()
 
-    # 2) Assemble and parse dates
+    # 2) Parse dates and collect
     items = []
     for d in docs:
         data = d.to_dict()
@@ -40,11 +44,10 @@ def generate_feed(request_url_root: str, bucket_name: str = None) -> str:
         items.append({
             "id":        d.id,
             "title":     data.get("title") or data.get("url", ""),
-            "audio_url": f"https://storage.googleapis.com/{bucket_name}/{d.id}.mp3",
             "pubdate":   dt,
         })
 
-    # 3) Sort descending by publish_date
+    # 3) Sort newest first
     items.sort(key=lambda x: x["pubdate"], reverse=True)
 
     # 4) Build the feed
@@ -61,17 +64,25 @@ def generate_feed(request_url_root: str, bucket_name: str = None) -> str:
         fe = fg.add_entry()
         fe.id(it["id"])
         fe.title(it["title"])
-        fe.link(href=it["audio_url"], rel="enclosure")
+
+        # look up the real MP3 size in bytes so length is accurate
+        blob = bucket.get_blob(f"{it['id']}.mp3")
+        length = str(blob.size) if blob and blob.size is not None else "0"
+
+        # proper enclosure() call sets url, length & MIME type
+        fe.enclosure(
+            url=f"https://storage.googleapis.com/{bucket_name}/{it['id']}.mp3",
+            length=length,
+            type="audio/mpeg"
+        )
+
         fe.pubDate(it["pubdate"])
 
-    # 5) Ensure we return a unicode string
+    # 5) Return clean UTF-8 string
     rss_bytes = fg.rss_str(pretty=True)
     if isinstance(rss_bytes, (bytes, bytearray)):
         try:
-            rss_txt = rss_bytes.decode("utf-8")
-        except Exception:
-            rss_txt = rss_bytes.decode("utf-8", errors="ignore")
-    else:
-        rss_txt = str(rss_bytes)
-
-    return rss_txt
+            return rss_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return rss_bytes.decode("utf-8", errors="ignore")
+    return str(rss_bytes)

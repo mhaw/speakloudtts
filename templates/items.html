@@ -1,4 +1,12 @@
 {% extends "base.html" %}
+
+{% block head %}
+  <title>All Articles | SpeakLoudTTS</title>
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SpeakLoudTTS">
+{% endblock %}
+
 {% block content %}
   <h2 class="text-2xl font-semibold mb-4">Processed Articles</h2>
 
@@ -31,34 +39,36 @@
         <tr class="border-t">
           <td class="px-4 py-2 flex items-center space-x-2">
             {% if it.favicon_url %}
-            <img src="{{ it.favicon_url }}"
-                 alt=""
-                 class="w-4 h-4 rounded-sm flex-shrink-0">
+              <img
+                src="{{ it.favicon_url }}"
+                alt=""
+                class="w-4 h-4 rounded-sm flex-shrink-0"
+              >
             {% endif %}
-            <a href="/items/{{ it.id }}"
-               class="hover:underline text-blue-600 dark:text-blue-400">
-              {{ it.title }}
-            </a>
+            <a
+              href="/items/{{ it.id }}"
+              class="hover:underline text-blue-600 dark:text-blue-400"
+            >{{ it.title }}</a>
           </td>
           <td class="px-4 py-2">{{ it.author }}</td>
           <td class="px-4 py-2">{{ it.date }}</td>
           <td class="px-4 py-2">{{ it.word_count }}</td>
           <td class="px-4 py-2">{{ it.reading_time }} min</td>
           <td class="px-4 py-2">
-            <audio controls preload="none" class="w-36"
-                   src="{{ it.audio_url }}"></audio>
+            <audio controls preload="none" class="w-36" src="{{ it.audio_url }}"></audio>
           </td>
           <td class="px-4 py-2">
-            <a href="{{ it.audio_url }}" download
-               class="text-blue-600 hover:underline dark:text-blue-300">
-              Download
-            </a>
+            <a
+              href="{{ it.audio_url }}"
+              download
+              class="text-blue-600 hover:underline dark:text-blue-300"
+            >Download</a>
           </td>
           <td class="px-4 py-2">
-            <a href="/items/{{ it.id }}"
-               class="text-indigo-600 hover:underline dark:text-indigo-300">
-              View
-            </a>
+            <a
+              href="/items/{{ it.id }}"
+              class="text-indigo-600 hover:underline dark:text-indigo-300"
+            >View</a>
           </td>
         </tr>
         {% endfor %}
@@ -68,20 +78,19 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const input = document.getElementById('filter-input');
-  const rows  = Array.from(document.querySelectorAll('tbody tr'));
-
-  input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
-    rows.forEach(row => {
-      // search entire row text for match
-      row.style.display = row.textContent.toLowerCase().includes(q)
-                          ? ''
-                          : 'none';
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    // simple client‐side filter
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('filter-input'),
+            rows  = Array.from(document.querySelectorAll('tbody tr'));
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        rows.forEach(r => {
+          r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+      });
     });
-  });
-});
-</script>
+  </script>
 {% endblock %}
