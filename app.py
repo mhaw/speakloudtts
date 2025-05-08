@@ -170,6 +170,36 @@ def list_errors():
         })
     return render_template("errors.html", errors=errors)
 
+@app.route("/api/items/<item_id>/retry", methods=["POST"])
+def retry_item(item_id):
+    doc = db.collection("items").document(item_id)
+    if not doc.get().exists:
+        return jsonify({"error": "Not found"}), 404
+
+    # reset its status & error fields
+    doc.update({
+      "status": "pending",
+      "error": firestore.DELETE_FIELD,
+      "created_at": firestore.SERVER_TIMESTAMP
+    })
+
+    # kick off background re-processing (in‐process for now)
+    record = doc.get().to_dict()
+    try:
+        tts_uri = synthesize_long_text(
+            record["text"],
+            record["title"],
+            record["author"],
+            item_id,
+            voice_name=record.get("voice_name", DEFAULT_VOICE)
+        )
+        doc.update({"status":"done","tts_uri": tts_uri})
+    except Exception as e:
+        doc.update({"status":"error","error": str(e)})
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"status":"requeued"}), 202
+
 
 # ─── Server-rendered list view ────────────────────────────────────────
 @app.route("/items", methods=["GET"])

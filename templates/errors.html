@@ -1,38 +1,110 @@
 {% extends "base.html" %}
-{% block content %}
-  <h2 class="text-2xl font-semibold mb-6">Errored Submissions</h2>
 
-  {% if errors %}
+{% block content %}
+  <h2 class="text-2xl font-semibold mb-4">Failed Articles</h2>
+
+  <!-- Search / Filter -->
+  <div class="flex mb-4 space-x-2">
+    <input
+      id="search-input"
+      type="text"
+      placeholder="Filter by URL or title…"
+      class="flex-1 px-4 py-2 border rounded focus:outline-none focus:ring"
+    />
+    <button
+      id="clear-search"
+      class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 disabled:opacity-50"
+      disabled
+      title="Clear filter"
+    >✕</button>
+  </div>
+
+  <!-- Error table -->
+  <div class="overflow-x-auto">
     <table class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
       <thead class="bg-gray-100 dark:bg-gray-700">
-        <tr class="text-left">
-          <th class="px-4 py-2">ID</th>
+        <tr class="text-left text-sm text-gray-700 dark:text-gray-300">
           <th class="px-4 py-2">URL</th>
-          <th class="px-4 py-2">When</th>
+          <th class="px-4 py-2">Title</th>
+          <th class="px-4 py-2">Failed At</th>
           <th class="px-4 py-2">Error Message</th>
+          <th class="px-4 py-2 text-center">Actions</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-        {% for e in errors %}
-        <tr class="bg-white dark:bg-gray-900">
-          <td class="px-4 py-2 text-sm font-mono">{{ e.id }}</td>
+      <tbody id="errors-body" class="divide-y divide-gray-200 dark:divide-gray-700">
+        {% for doc in errors %}
+        <tr class="bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-200">
+          <td class="px-4 py-2 break-all">{{ doc.url }}</td>
+          <td class="px-4 py-2">{{ doc.title or "Unknown" }}</td>
+          <td class="px-4 py-2">{{ doc.failed_at_fmt }}</td>
+          <td class="px-4 py-2 truncate max-w-xs" title="{{ doc.error }}">{{ doc.error }}</td>
           <td class="px-4 py-2">
-            <a href="{{ e.url }}" target="_blank"
-               class="text-primary hover:underline break-all">
-              {{ e.url }}
-            </a>
-          </td>
-          <td class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
-            {{ e.created_at.strftime("%b %-d, %Y %H:%M") if e.created_at else "–" }}
-          </td>
-          <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400 break-words">
-            {{ e.error }}
+            <div class="flex flex-col items-center space-y-1">
+              <button
+                class="retry-btn px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
+                data-id="{{ doc.id }}"
+              >🔄 Retry</button>
+              <span class="status-msg text-xs mt-1"></span>
+              <div class="flex space-x-2 mt-1">
+                <a href="{{ doc.url }}" target="_blank"
+                   class="text-indigo-600 hover:underline text-xs">🔗 Open</a>
+                <a href="/items/{{ doc.id }}"
+                   class="text-indigo-600 hover:underline text-xs">👁️ View</a>
+              </div>
+            </div>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-  {% else %}
-    <p class="text-gray-600 dark:text-gray-400">No errored submissions.</p>
-  {% endif %}
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const body        = document.getElementById('errors-body'),
+        retryBtns   = body.querySelectorAll('.retry-btn'),
+        searchInput = document.getElementById('search-input'),
+        clearBtn    = document.getElementById('clear-search');
+
+  // Helper to filter rows
+  function filterRows() {
+    const q = searchInput.value.trim().toLowerCase();
+    clearBtn.disabled = !q;
+    body.querySelectorAll('tr').forEach(row => {
+      const url   = row.children[0].textContent.toLowerCase(),
+            title = row.children[1].textContent.toLowerCase();
+      row.style.display = (url.includes(q) || title.includes(q)) ? '' : 'none';
+    });
+  }
+  searchInput.addEventListener('input', filterRows);
+  clearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    clearBtn.disabled = true;
+    filterRows();
+  });
+
+  // Retry handler
+  retryBtns.forEach(btn => {
+    const statusEl = btn.parentElement.querySelector('.status-msg');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      statusEl.textContent = '⏳ retrying…';
+      try {
+        const res = await fetch(`/api/items/${btn.dataset.id}/retry`, { method: 'POST' });
+        if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+        statusEl.textContent = '✅ done';
+        btn.textContent = '✅';
+      } catch (err) {
+        statusEl.textContent = '⚠️ failed';
+        statusEl.classList.add('text-red-600');
+        btn.textContent = '⚠️';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+});
+</script>
 {% endblock %}
