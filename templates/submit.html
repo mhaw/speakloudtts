@@ -1,22 +1,38 @@
 {% extends "base.html" %}
+
 {% block content %}
   <h2 class="text-2xl font-semibold mb-4">Submit an Article URL</h2>
 
   <form id="submit-form" class="space-y-4">
-    <input 
-      type="url" 
-      id="url-input" 
-      placeholder="https://example.com/article" 
-      class="w-full px-4 py-2 border rounded focus:outline-none focus:ring" 
+    <input
+      type="url"
+      id="url-input"
+      placeholder="https://example.com/article"
+      class="w-full px-4 py-2 border rounded focus:outline-none focus:ring"
       required
       autofocus
-    >
-    <button 
-      type="submit" 
+    />
+
+    <label for="voice-select" class="block font-medium">Choose voice:</label>
+    <select id="voice-select" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring">
+      <option value="en-US-Wavenet-D">US Male (D) — neutral all-purpose</option>
+      <option value="en-US-Wavenet-F">US Female (F) — clear announcer voice</option>
+      <option value="en-GB-Wavenet-A">UK Female (A) — warm conversational</option>
+      <option value="en-AU-Wavenet-B">AU Male (B) — friendly tone</option>
+    </select>
+
+    <button
+      type="submit"
       id="submit-btn"
-      class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+      class="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
     >
-      Convert to Audio
+      <svg id="btn-spinner" class="hidden animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10"
+                stroke="currentColor" stroke-width="4" fill="none"/>
+        <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <span id="btn-text">Convert to Audio</span>
     </button>
   </form>
 
@@ -30,110 +46,91 @@
       <!-- populated by JS -->
     </ul>
   </section>
+{% endblock %}
 
-  <script>
-    const form      = document.getElementById('submit-form');
-    const input     = document.getElementById('url-input');
-    const btn       = document.getElementById('submit-btn');
-    const statusDiv = document.getElementById('status');
+{% block scripts %}
+<script>
+  const form      = document.getElementById('submit-form');
+  const input     = document.getElementById('url-input');
+  const voiceSel  = document.getElementById('voice-select');
+  const btn       = document.getElementById('submit-btn');
+  const spinner   = document.getElementById('btn-spinner');
+  const btnText   = document.getElementById('btn-text');
+  const statusDiv = document.getElementById('status');
 
-    async function loadRecent() {
-      try {
-        const res   = await fetch('/api/recent');
-        const items = await res.json();
-        const ul    = document.getElementById('recent-list');
-        ul.innerHTML = '';
-        items.forEach(i => {
-          const li = document.createElement('li');
-          const a  = document.createElement('a');
-          a.href       = `/items/${i.id}`;
-          a.textContent= i.title;
-          a.className  = 'hover:underline';
-          li.append(a);
-          ul.append(li);
-        });
-      } catch (e) {
-        // fail silently
-      }
+  async function loadRecent() {
+    try {
+      const res   = await fetch('/api/recent');
+      const items = await res.json();
+      const ul    = document.getElementById('recent-list');
+      ul.innerHTML = '';
+      items.forEach(i => {
+        const li = document.createElement('li');
+        const a  = document.createElement('a');
+        a.href        = `/items/${i.id}`;
+        a.textContent = i.title;
+        a.className   = 'hover:underline';
+        li.append(a);
+        ul.append(li);
+      });
+    } catch (e) {
+      // silently fail
+    }
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    // clear any prior error
+    statusDiv.textContent = '';
+
+    const url = input.value.trim();
+    if (!url) {
+      statusDiv.innerHTML = `<p class="text-red-600">Please enter a valid URL.</p>`;
+      return;
     }
 
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      statusDiv.innerHTML = `<div class="flex items-center space-x-2 text-gray-600 dark:text-gray-400">
-        <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10"
-                  stroke="currentColor" stroke-width="4" fill="none"/>
-          <path class="opacity-75" fill="currentColor"
-                d="M4 12a8 8 0 018-8v8H4z"/>
-        </svg>
-        <span>Submitting URL…</span>
-      </div>`;
-      btn.disabled = true;
-      input.disabled = true;
+    // disable & show spinner
+    btn.disabled = true;
+    input.disabled = true;
+    voiceSel.disabled = true;
+    spinner.classList.remove('hidden');
+    btnText.textContent = 'Submitting…';
 
-      const url = input.value.trim();
-      if (!url) {
-        statusDiv.innerHTML = `<p class="text-red-600">Please enter a valid URL.</p>`;
-        btn.disabled = false;
-        input.disabled = false;
-        return;
+    try {
+      statusDiv.innerHTML = `<p>Validating &amp; extracting…</p>`;
+      const res  = await fetch('/submit', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          url,
+          voice_name: voiceSel.value
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || 'Unexpected server response.');
       }
 
-      try {
-        // 1) Submit to server
-        statusDiv.innerHTML = `<p>Validating &amp; extracting…</p>`;
-        const res  = await fetch('/submit', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({url})
-        });
-        const data = await res.json();
+      // done server-side → jump to detail
+      window.location.href = `/items/${data.item_id}`;
+    } catch(err) {
+      console.error(err);
+      statusDiv.innerHTML = `
+        <div class="text-red-600">
+          <strong>Error:</strong> ${err.message}
+          <p class="mt-2 text-sm">Tip: Try another URL or check your console for details.</p>
+        </div>`;
+    } finally {
+      btn.disabled    = false;
+      input.disabled  = false;
+      voiceSel.disabled = false;
+      spinner.classList.add('hidden');
+      btnText.textContent = 'Convert to Audio';
+    }
+  });
 
-        if (!res.ok) {
-          throw new Error(data.detail || data.error ||
-            'Unexpected server response.');
-        }
-
-        // 2) Show next step
-        statusDiv.innerHTML = `<p>Great! Generating audio (this can take a minute)…</p>`;
-
-        // 3) Poll for completion
-        const itemId = data.item_id;
-        let attempts = 0;
-        while (attempts < 30) {
-          await new Promise(r => setTimeout(r, 2000));
-          const st = await fetch(`/api/items/${itemId}`);
-          if (st.status === 200) {
-            const info = await st.json();
-            if (info.status === 'done') {
-              window.location.href = `/items/${itemId}`;
-              return;
-            }
-            if (info.status === 'error') {
-              throw new Error(info.error || 'TTS generation failed');
-            }
-            statusDiv.innerHTML = `<p>Still processing… (${info.status})</p>`;
-          }
-          attempts++;
-        }
-
-        throw new Error('Took too long – please check back later.');
-      }
-      catch(err) {
-        console.error(err);
-        statusDiv.innerHTML = `
-          <div class="text-red-600">
-            <strong>Error:</strong> ${err.message}
-            <p class="mt-2 text-sm">Tip: Try a different article URL or check the console for details.</p>
-          </div>`;
-      }
-      finally {
-        btn.disabled   = false;
-        input.disabled = false;
-      }
-    });
-
-    // load recent on page load
-    loadRecent();
-  </script>
+  // populate recent on load
+  loadRecent();
+</script>
 {% endblock %}

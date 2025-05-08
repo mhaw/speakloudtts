@@ -2,183 +2,86 @@
 {% block content %}
   <h2 class="text-2xl font-semibold mb-4">Processed Articles</h2>
 
-  <!-- Search bar -->
-  <div class="flex mb-4 space-x-2">
+  <!-- Filter input -->
+  <div class="mb-4">
     <input
-      id="search-input"
+      id="filter-input"
       type="text"
-      placeholder="Search titles or authors…"
-      class="flex-1 px-4 py-2 border rounded focus:outline-none focus:ring"
+      placeholder="Filter by title, author or tags…"
+      class="w-full px-4 py-2 border rounded focus:outline-none focus:ring"
     />
-    <button
-      id="clear-search"
-      class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-      title="Clear search"
-    >✕</button>
   </div>
 
-  <!-- Table -->
   <div class="overflow-x-auto">
     <table class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
       <thead class="bg-gray-100 dark:bg-gray-700">
-        <tr>
-          <th data-sort="title" class="px-4 py-2 cursor-pointer">Title ↕</th>
-          <th data-sort="author" class="px-4 py-2 cursor-pointer">Author ↕</th>
-          <th data-sort="publish_date" class="px-4 py-2 cursor-pointer">Date ↕</th>
-          <th data-sort="word_count" class="px-4 py-2 cursor-pointer">Words ↕</th>
-          <th data-sort="reading_time_min" class="px-4 py-2 cursor-pointer">Read Time ↕</th>
-          <th class="px-4 py-2">Listen</th>
-          <th class="px-4 py-2">Tags</th>
+        <tr class="text-left">
+          <th class="px-4 py-2">Title</th>
+          <th class="px-4 py-2">Author</th>
+          <th class="px-4 py-2">Date</th>
+          <th class="px-4 py-2">Words</th>
+          <th class="px-4 py-2">Read Time</th>
+          <th class="px-4 py-2">Audio</th>
+          <th class="px-4 py-2">Download</th>
+          <th class="px-4 py-2">Details</th>
         </tr>
       </thead>
-      <tbody id="items-body" class="divide-y divide-gray-200 dark:divide-gray-700">
-        <!-- rows injected by JS -->
+      <tbody>
+        {% for it in items %}
+        <tr class="border-t">
+          <td class="px-4 py-2 flex items-center space-x-2">
+            {% if it.favicon_url %}
+            <img src="{{ it.favicon_url }}"
+                 alt=""
+                 class="w-4 h-4 rounded-sm flex-shrink-0">
+            {% endif %}
+            <a href="/items/{{ it.id }}"
+               class="hover:underline text-blue-600 dark:text-blue-400">
+              {{ it.title }}
+            </a>
+          </td>
+          <td class="px-4 py-2">{{ it.author }}</td>
+          <td class="px-4 py-2">{{ it.date }}</td>
+          <td class="px-4 py-2">{{ it.word_count }}</td>
+          <td class="px-4 py-2">{{ it.reading_time }} min</td>
+          <td class="px-4 py-2">
+            <audio controls preload="none" class="w-36"
+                   src="{{ it.audio_url }}"></audio>
+          </td>
+          <td class="px-4 py-2">
+            <a href="{{ it.audio_url }}" download
+               class="text-blue-600 hover:underline dark:text-blue-300">
+              Download
+            </a>
+          </td>
+          <td class="px-4 py-2">
+            <a href="/items/{{ it.id }}"
+               class="text-indigo-600 hover:underline dark:text-indigo-300">
+              View
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>
-
-  <!-- Pagination -->
-  <div class="mt-4 flex justify-center items-center space-x-4">
-    <button id="prev-page"
-            class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-            disabled>← Prev</button>
-    <span>Page <span id="page-num">1</span> of <span id="page-total">1</span></span>
-    <button id="next-page"
-            class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
-            disabled>Next →</button>
-  </div>
 {% endblock %}
-
 
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  let page      = 1,
-      pageSize  = 20,
-      totalPages= 1,
-      search    = '',
-      tagFilter = '',
-      sortBy    = 'publish_date',
-      order     = 'desc';
+  const input = document.getElementById('filter-input');
+  const rows  = Array.from(document.querySelectorAll('tbody tr'));
 
-  const body       = document.getElementById('items-body'),
-        searchIn   = document.getElementById('search-input'),
-        clearBtn   = document.getElementById('clear-search'),
-        prevBtn    = document.getElementById('prev-page'),
-        nextBtn    = document.getElementById('next-page'),
-        pageNum    = document.getElementById('page-num'),
-        pageTotal  = document.getElementById('page-total'),
-        headers    = document.querySelectorAll('th[data-sort]');
-
-  // Fetch & render
-  async function loadItems() {
-    const qs = new URLSearchParams({
-      page: page,
-      page_size: pageSize,
-      search: search,
-      tag: tagFilter,
-      sort_by: sortBy,
-      order: order
-    });
-    const res = await fetch(`/api/items?${qs}`);
-    const { items, total } = await res.json();
-    totalPages = Math.ceil(total / pageSize) || 1;
-    renderTable(items);
-    updatePagination();
-  }
-
-  // Build table rows
-  function renderTable(items) {
-    body.innerHTML = '';
-    for (const it of items) {
-      const tr = document.createElement('tr');
-      tr.className = 'bg-white dark:bg-gray-900';
-      tr.innerHTML = `
-        <td class="px-4 py-2 text-blue-600 hover:underline">
-          <a href="/items/${it.id}">${it.title}</a>
-        </td>
-        <td class="px-4 py-2">${it.author}</td>
-        <td class="px-4 py-2">${it.publish_date}</td>
-        <td class="px-4 py-2">${it.word_count}</td>
-        <td class="px-4 py-2">${it.reading_time_min} min</td>
-        <td class="px-4 py-2 text-center">
-          <input type="checkbox"
-                 class="listen-toggle"
-                 data-id="${it.id}"
-                 ${it.listened ? 'checked' : ''}>
-        </td>
-        <td class="px-4 py-2">
-          ${it.tags.map(t => `<span class="tag-pill inline-block bg-gray-200 text-sm px-2 py-1 rounded mr-1 mb-1 dark:bg-gray-700 cursor-pointer">${t}</span>`).join('')}
-        </td>`;
-      body.appendChild(tr);
-    }
-  }
-
-  // Update pagination buttons & labels
-  function updatePagination() {
-    pageNum.textContent   = page;
-    pageTotal.textContent = totalPages;
-    prevBtn.disabled = (page <= 1);
-    nextBtn.disabled = (page >= totalPages);
-  }
-
-  // Event: sorting
-  headers.forEach(h => {
-    h.addEventListener('click', () => {
-      const key = h.dataset.sort;
-      if (sortBy === key) {
-        order = (order === 'asc' ? 'desc' : 'asc');
-      } else {
-        sortBy = key;
-        order  = 'asc';
-      }
-      page = 1;
-      loadItems();
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    rows.forEach(row => {
+      // search entire row text for match
+      row.style.display = row.textContent.toLowerCase().includes(q)
+                          ? ''
+                          : 'none';
     });
   });
-
-  // Event: search
-  searchIn.addEventListener('input', () => {
-    search = searchIn.value.trim();
-    page = 1;
-    loadItems();
-  });
-  clearBtn.addEventListener('click', () => {
-    search = searchIn.value = '';
-    page = 1;
-    loadItems();
-  });
-
-  // Event: pagination
-  prevBtn.addEventListener('click', () => {
-    if (page > 1) { page--; loadItems(); }
-  });
-  nextBtn.addEventListener('click', () => {
-    if (page < totalPages) { page++; loadItems(); }
-  });
-
-  // Event delegation: listened toggle & tag filter
-  body.addEventListener('change', async e => {
-    if (e.target.matches('.listen-toggle')) {
-      const id = e.target.dataset.id;
-      await fetch(`/api/items/${id}/listen`, {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ listened: e.target.checked })
-      });
-    }
-  });
-
-  body.addEventListener('click', e => {
-    if (e.target.matches('.tag-pill')) {
-      tagFilter = e.target.textContent;
-      page = 1;
-      loadItems();
-    }
-  });
-
-  // initial load
-  loadItems();
 });
 </script>
 {% endblock %}

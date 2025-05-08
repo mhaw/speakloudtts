@@ -4,27 +4,17 @@ import subprocess
 from typing import List
 from google.cloud import texttospeech, storage
 
-# ─── Configuration ──────────────────────────────────────────────────────────────
 GCS_BUCKET = os.getenv("GCS_BUCKET_NAME", "speakloudtts-audio-files")
-MAX_BYTES  = 4500  # Leave headroom under the 5000-byte SSML limit
+MAX_BYTES  = 4500  # headroom under 5000-byte SSML limit
 
-# ─── GCP Clients ─────────────────────────────────────────────────────────────────
+# GCP clients
 tts_client     = texttospeech.TextToSpeechClient()
 storage_client = storage.Client()
 bucket         = storage_client.bucket(GCS_BUCKET)
 
-VOICE_PARAMS = texttospeech.VoiceSelectionParams(
-    language_code="en-US",
-    name="en-US-Wavenet-F",
-    ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
-)
 AUDIO_CONFIG = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-
 def _build_ssml(title: str, author: str, paragraphs: List[str]) -> List[str]:
-    """
-    Wrap paragraphs in SSML and chunk so each payload (with tags) stays under MAX_BYTES.
-    """
     prefix = (
         "<speak>"
         f"<p><emphasis level='moderate'>Title:</emphasis> {title}. "
@@ -37,44 +27,47 @@ def _build_ssml(title: str, author: str, paragraphs: List[str]) -> List[str]:
 
     for p in paragraphs:
         block = f"<p>{p}</p><break time='300ms'/>"
-        # if adding this block would exceed MAX_BYTES once encoded, close & start new
         if len((current + block + suffix).encode("utf-8")) > MAX_BYTES:
             chunks.append(current + suffix)
             current = prefix + block
         else:
             current += block
 
-    # finish last chunk
     chunks.append(current + suffix)
     return chunks
 
 
-def synthesize_long_text(title: str, author: str, full_text: str, item_id: str) -> str:
+def synthesize_long_text(
+    title: str,
+    author: str,
+    full_text: str,
+    item_id: str,
+    voice_name: str
+) -> dict:
     """
-    Produces a single MP3 in GCS by:
-     1) Splitting text into paragraphs
-     2) Building SSML chunks under the byte limit
-     3) Calling Google TTS on each chunk
-     4) Merging via ffmpeg
-     5) Uploading to GCS
-    Returns the public URL of the final MP3.
+    Returns:
+      {
+        'uri':              <public GCS URL>,
+        'duration_secs':    <float>,
+        'char_count':       <int>
+      }
     """
-    # 1) Paragraph split
+    # Split into paragraphs
     paras = [p.strip() for p in full_text.split("\n\n") if p.strip()]
     if len(paras) <= 1:
         paras = [p for p in full_text.splitlines() if p.strip()]
 
-    # 2) Build SSML‐safe chunks
     ssml_chunks = _build_ssml(title, author, paras)
+    tmpdir      = tempfile.gettempdir()
+    seg_paths   = []
 
-    tmpdir   = tempfile.gettempdir()
-    seg_paths = []
-
-    # 3) Synthesize each SSML chunk
     for idx, ssml in enumerate(ssml_chunks):
         resp = tts_client.synthesize_speech(
             input=texttospeech.SynthesisInput(ssml=ssml),
-            voice=VOICE_PARAMS,
+            voice=texttospeech.VoiceSelectionParams(
+                language_code="en-US",
+                name=voice_name
+            ),
             audio_config=AUDIO_CONFIG,
         )
         path = os.path.join(tmpdir, f"{item_id}_{idx}.mp3")
@@ -82,20 +75,41 @@ def synthesize_long_text(title: str, author: str, full_text: str, item_id: str) 
             f.write(resp.audio_content)
         seg_paths.append(path)
 
-    # 4) Create ffmpeg concat list
+    # FFmpeg concat
     list_file = os.path.join(tmpdir, f"{item_id}_list.txt")
     with open(list_file, "w") as f:
         for p in seg_paths:
             f.write(f"file '{p}'\n")
 
     merged = os.path.join(tmpdir, f"{item_id}_full.mp3")
-    subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
-         "-i", list_file, "-c", "copy", merged],
-        check=True,
-    )
+    subprocess.run([
+        "ffmpeg","-y","-loglevel","error",
+        "-f","concat","-safe","0","-i",list_file,
+        "-c","copy", merged
+    ], check=True)
 
-    # 5) Upload to GCS
+    # get duration via ffprobe
+    result = subprocess.run(
+        [
+          "ffprobe","-v","error",
+          "-show_entries","format=duration",
+          "-of","default=noprint_wrappers=1:nokey=1",
+          merged
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    try:
+        duration_secs = float(result.stdout.strip())
+    except Exception:
+        duration_secs = None
+
+    # upload
     blob = bucket.blob(f"{item_id}.mp3")
     blob.upload_from_filename(merged, content_type="audio/mpeg")
-    return f"https://storage.googleapis.com/{GCS_BUCKET}/{item_id}.mp3"
+    uri = f"https://storage.googleapis.com/{GCS_BUCKET}/{item_id}.mp3"
+
+    return {
+        "uri": uri,
+        "duration_secs": duration_secs,
+        "char_count": len(full_text)
+    }

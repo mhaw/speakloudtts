@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2 class="text-2xl font-semibold mb-6">Errored Submissions</h2>
+
+  {% if errors %}
+    <table class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
+      <thead class="bg-gray-100 dark:bg-gray-700">
+        <tr class="text-left">
+          <th class="px-4 py-2">ID</th>
+          <th class="px-4 py-2">URL</th>
+          <th class="px-4 py-2">When</th>
+          <th class="px-4 py-2">Error Message</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+        {% for e in errors %}
+        <tr class="bg-white dark:bg-gray-900">
+          <td class="px-4 py-2 text-sm font-mono">{{ e.id }}</td>
+          <td class="px-4 py-2">
+            <a href="{{ e.url }}" target="_blank"
+               class="text-primary hover:underline break-all">
+              {{ e.url }}
+            </a>
+          </td>
+          <td class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+            {{ e.created_at.strftime("%b %-d, %Y %H:%M") if e.created_at else "–" }}
+          </td>
+          <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400 break-words">
+            {{ e.error }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-gray-600 dark:text-gray-400">No errored submissions.</p>
+  {% endif %}
+{% endblock %}
