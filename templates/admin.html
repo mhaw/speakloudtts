@@ -1,0 +1,37 @@
+{# templates/admin.html #}
+{% extends "base.html" %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold mb-6">Admin Dashboard</h1>
+
+  <!-- 1) Stats cards -->
+  <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    {# cards will be injected here by admin.js #}
+  </div>
+
+  <!-- 2) Full articles table -->
+  <h2 class="text-2xl font-semibold mb-4">All Articles</h2>
+  <div class="overflow-x-auto">
+    <table id="admin-table" class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
+      <thead class="bg-gray-100 dark:bg-gray-700 text-left text-sm text-gray-700 dark:text-gray-300">
+        <tr>
+          <th class="px-4 py-2">ID</th>
+          <th class="px-4 py-2">Title</th>
+          <th class="px-4 py-2">Status</th>
+          <th class="px-4 py-2">Voice</th>
+          <th class="px-4 py-2">Published</th>
+          <th class="px-4 py-2">Tags</th>
+          <th class="px-4 py-2 text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# rows will be injected here by admin.js #}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

@@ -13,6 +13,9 @@ from extractor import extract_article
 from tts import synthesize_long_text
 import rss
 
+from flask import render_template, request, jsonify, abort
+from collections import Counter
+
 # ─── Logging ─────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -103,7 +106,11 @@ def submit_url():
             voice
         )
         tts_uri = result["uri"]
-        doc_ref.update({"status": "done", "tts_uri": tts_uri})
+        doc_ref.update({
+            "status":       "done",
+            "tts_uri":      tts_uri,
+            "processed_at": firestore.SERVER_TIMESTAMP,
+        })
     except Exception as e:
         logger.exception("TTS/upload error")
         doc_ref.update({"status": "error", "error": str(e)})
@@ -194,7 +201,11 @@ def retry_item(item_id):
             record.get("voice", DEFAULT_VOICE)
         )
         tts_uri = result["uri"]
-        doc_ref.update({"status": "done", "tts_uri": tts_uri})
+        doc_ref.update({
+            "status":       "done",
+            "tts_uri":      tts_uri,
+            "processed_at": firestore.SERVER_TIMESTAMP,
+        })
     except Exception as e:
         doc_ref.update({"status": "error", "error": str(e)})
         return jsonify({"error": str(e)}), 500
@@ -256,6 +267,45 @@ def rss_feed():
     xml = rss.generate_feed(request.url_root, bucket_name=GCS_BUCKET)
     return Response(xml, mimetype="application/rss+xml")
 
+# --- Admin
+
+@app.route("/admin", methods=["GET"])
+def admin_dashboard():
+    return render_template("admin.html")
+
+@app.route("/api/admin/stats", methods=["GET"])
+def api_admin_stats():
+    docs = db.collection("items").stream()
+    counts = Counter()
+    tag_counts = Counter()
+    for d in docs:
+        data = d.to_dict()
+        counts[data.get("status", "unknown")] += 1
+        for t in data.get("tags", []):
+            tag_counts[t] += 1
+    total = sum(counts.values())
+    return jsonify({
+      "total":   total,
+      "done":    counts["done"],
+      "error":   counts["error"],
+      "pending": counts["pending"],
+      "by_tag":  dict(tag_counts)
+    })
+
+@app.route("/api/items/<item_id>", methods=["PUT"])
+def api_update_item(item_id):
+    payload = request.get_json(silent=True) or {}
+    allowed = {"title", "author", "publish_date", "tags", "voice"}
+    update_data = {k: v for k, v in payload.items() if k in allowed}
+    if not update_data:
+        return jsonify({"error": "No editable fields provided"}), 400
+
+    doc_ref = db.collection("items").document(item_id)
+    if not doc_ref.get().exists:
+        return jsonify({"error": "Not found"}), 404
+
+    doc_ref.update(update_data)
+    return jsonify({"id": item_id, **update_data}), 200
 
 # ─── Health Check ─────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
