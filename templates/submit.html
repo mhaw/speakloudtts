@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 
+{% block title %}Submit · SpeakLoudTTS{% endblock %}
+
 {% block content %}
   <h2 class="text-2xl font-semibold mb-4">Submit an Article URL</h2>
 
@@ -8,31 +10,30 @@
       type="url"
       id="url-input"
       placeholder="https://example.com/article"
-      class="w-full px-4 py-2 border rounded focus:outline-none focus:ring"
+      class="w-full px-4 py-2 border rounded focus:outline-none focus:ring
+             bg-white text-gray-900 border-gray-300
+             dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
       required
       autofocus
     />
 
     <label for="voice-select" class="block font-medium">Choose voice:</label>
-    <select id="voice-select" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring">
-      <option value="en-US-Wavenet-A">US Female (A) — conversational</option>
-          <option value="en-US-Wavenet-B">US Female (B) — announcer-style</option>
-          <option value="en-US-Wavenet-C">US Male (C) — newscaster</option>
-          <option value="en-US-Wavenet-D">US Male (D) — neutral (current default)</option>
-          <option value="en-US-Wavenet-E">US Male (E) — midrange</option>
-          <option value="en-US-Wavenet-F">US Female (F) — clear (current)</option>
-          <option value="en-GB-Wavenet-A">UK Female (A) — warm conversational</option>
-          <option value="en-GB-Wavenet-D">UK Male (D) — formal announcer</option>
-          <option value="en-AU-Wavenet-C">AU Female (C) — friendly (current alt)</option>
-          <!-- and if you want Neural2: -->
-          <option value="en-US-Neural2-A">US Female (Neural2 A) — ultra-natural</option>
-          <option value="en-US-Neural2-B">US Male (Neural2 B) — ultra-natural</option>
+    <select id="voice-select"
+            class="w-full px-4 py-2 border rounded focus:outline-none focus:ring
+                   bg-white text-gray-900 border-gray-300
+                   dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">
+      {% for v in voices %}
+        <option value="{{ v }}" {% if v==default_voice %}selected{% endif %}>
+          {{ v.replace('-', ' ') }}
+        </option>
+      {% endfor %}
     </select>
 
     <button
       type="submit"
       id="submit-btn"
       class="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
+      disabled
     >
       <svg id="btn-spinner" class="hidden animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10"
@@ -51,94 +52,12 @@
   <section id="recent-section">
     <h3 class="text-xl font-medium mb-2">Recent Articles</h3>
     <ul id="recent-list" class="list-disc list-inside space-y-1 text-blue-600 dark:text-blue-400">
-      <!-- populated by JS -->
+      <!-- populated by submit.js -->
     </ul>
   </section>
 {% endblock %}
 
 {% block scripts %}
-<script>
-  const form      = document.getElementById('submit-form');
-  const input     = document.getElementById('url-input');
-  const voiceSel  = document.getElementById('voice-select');
-  const btn       = document.getElementById('submit-btn');
-  const spinner   = document.getElementById('btn-spinner');
-  const btnText   = document.getElementById('btn-text');
-  const statusDiv = document.getElementById('status');
-
-  async function loadRecent() {
-    try {
-      const res   = await fetch('/api/recent');
-      const items = await res.json();
-      const ul    = document.getElementById('recent-list');
-      ul.innerHTML = '';
-      items.forEach(i => {
-        const li = document.createElement('li');
-        const a  = document.createElement('a');
-        a.href        = `/items/${i.id}`;
-        a.textContent = i.title;
-        a.className   = 'hover:underline';
-        li.append(a);
-        ul.append(li);
-      });
-    } catch (e) {
-      // silently fail
-    }
-  }
-
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    // clear any prior error
-    statusDiv.textContent = '';
-
-    const url = input.value.trim();
-    if (!url) {
-      statusDiv.innerHTML = `<p class="text-red-600">Please enter a valid URL.</p>`;
-      return;
-    }
-
-    // disable & show spinner
-    btn.disabled = true;
-    input.disabled = true;
-    voiceSel.disabled = true;
-    spinner.classList.remove('hidden');
-    btnText.textContent = 'Submitting…';
-
-    try {
-      statusDiv.innerHTML = `<p>Validating &amp; extracting…</p>`;
-      const res  = await fetch('/submit', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          url,
-          voice_name: voiceSel.value
-        })
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.detail || data.error || 'Unexpected server response.');
-      }
-
-      // done server-side → jump to detail
-      window.location.href = `/items/${data.item_id}`;
-    } catch(err) {
-      console.error(err);
-      statusDiv.innerHTML = `
-        <div class="text-red-600">
-          <strong>Error:</strong> ${err.message}
-          <p class="mt-2 text-sm">Tip: Try another URL or check your console for details.</p>
-        </div>`;
-    } finally {
-      btn.disabled    = false;
-      input.disabled  = false;
-      voiceSel.disabled = false;
-      spinner.classList.add('hidden');
-      btnText.textContent = 'Convert to Audio';
-    }
-  });
-
-  // populate recent on load
-  loadRecent();
-</script>
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/submit.js') }}"></script>
 {% endblock %}

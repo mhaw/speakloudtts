@@ -1,10 +1,8 @@
 // static/js/app.js
-
 document.addEventListener('DOMContentLoaded', () => {
   const audio       = document.getElementById('audio-player');
   if (!audio) return;
 
-  // Elements
   const paras       = Array.from(document.querySelectorAll('#full-text .paragraph'));
   const progressBar = document.getElementById('audio-progress');
   const currentEl   = document.getElementById('current-time');
@@ -14,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const forwardBtn  = document.getElementById('forward-btn');
   const storageKey  = `playbackPos-${window.location.pathname}`;
 
-  // —— Skip Back / Forward ——————————————————————————————————————
+  // Skip buttons
   rewindBtn.addEventListener('click', () => {
     audio.currentTime = Math.max(0, audio.currentTime - 15);
   });
@@ -22,108 +20,101 @@ document.addEventListener('DOMContentLoaded', () => {
     audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30);
   });
 
-  // —— Speed Controls ————————————————————————————————————————
+  // Speed controls
   const allowedRates = [0.8, 1.0, 1.1, 1.25, 1.5];
   function setSpeed(rate) {
     audio.playbackRate = rate;
     localStorage.setItem('playbackRate', rate);
     speedBtns.forEach(btn => {
       const r = parseFloat(btn.dataset.rate);
-      // remove any button not in allowedRates
-      if (!allowedRates.includes(r)) {
-        btn.remove();
-      } else {
-        btn.classList.toggle('bg-primary', r === rate);
-      }
+      if (!allowedRates.includes(r)) return btn.remove();
+      btn.classList.toggle('bg-primary', r === rate);
     });
   }
-
-  // initialize speed
   let savedRate = parseFloat(localStorage.getItem('playbackRate'));
   if (!allowedRates.includes(savedRate)) savedRate = 1.0;
   setSpeed(savedRate);
-
-  // wire buttons
   speedBtns.forEach(btn => {
-    const rate = parseFloat(btn.dataset.rate);
-    if (allowedRates.includes(rate)) {
-      btn.addEventListener('click', () => setSpeed(rate));
+    const r = parseFloat(btn.dataset.rate);
+    if (allowedRates.includes(r)) {
+      btn.addEventListener('click', () => setSpeed(r));
     }
   });
 
-  // —— Highlighting & Progress ————————————————————————————————
+  // Highlight & progress
   let boundaries = [];
-
   audio.addEventListener('loadedmetadata', () => {
-    // restore previous position
+    // restore pos
     const saved = parseFloat(localStorage.getItem(storageKey));
     if (!isNaN(saved)) audio.currentTime = Math.min(saved, audio.duration - 0.1);
 
-    // compute boundaries solely from paragraph lengths
+    // compute boundaries
     const lengths  = paras.map(p => p.textContent.length);
-    const totalLen = lengths.reduce((a, b) => a + b, 0) || 1;
+    const totalLen = lengths.reduce((a,b) => a+b, 0) || 1;
     let acc = 0;
     boundaries = lengths.map(len => {
       const t = (acc + len) / totalLen * audio.duration;
       acc += len;
       return t;
     });
-
     totalEl.textContent = formatTime(audio.duration);
   });
 
   audio.addEventListener('timeupdate', () => {
     const t = audio.currentTime;
     localStorage.setItem(storageKey, t);
-
-    // update progress bar & timestamp
     progressBar.value = (t / audio.duration) * 100;
     currentEl.textContent = formatTime(t);
 
-    // highlight the current paragraph
     let idx = boundaries.findIndex(b => t <= b);
     if (idx < 0) idx = paras.length - 1;
-    paras.forEach((p, i) => {
+    paras.forEach((p,i) => {
       const on = i === idx;
       p.classList.toggle('bg-yellow-100', on);
       p.classList.toggle('dark:bg-yellow-800', on);
       p.classList.toggle('p-2', on);
       p.classList.toggle('rounded', on);
-      if (on) p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (on) p.scrollIntoView({ behavior:'smooth', block:'center' });
     });
   });
 
-  // click-to-seek on the progress bar
   progressBar.addEventListener('click', e => {
     const pct = e.offsetX / progressBar.offsetWidth;
     audio.currentTime = pct * audio.duration;
   });
 
   function formatTime(sec) {
-    const m = Math.floor(sec / 60);
-    const s = String(Math.floor(sec % 60)).padStart(2, '0');
+    const m = Math.floor(sec/60), s = String(Math.floor(sec%60)).padStart(2,'0');
     return `${m}:${s}`;
   }
 
-  // —— Media Session API —————————————————————————————————————————
+  // MediaSession
   if ('mediaSession' in navigator) {
-    const title   = document.querySelector('h1')?.textContent || '';
-    const byline  = document.querySelector('p.text-gray-600')?.textContent.replace(/^By\s*/, '') || '';
-    const artwork = document.querySelector('img.w-6')?.src;
-
     navigator.mediaSession.metadata = new MediaMetadata({
-      title,
-      artist: byline,
-      album: 'SpeakLoudTTS',
-      artwork: artwork ? [
-        { src: artwork, sizes: '96x96',   type: 'image/png' },
-        { src: artwork, sizes: '192x192', type: 'image/png' }
-      ] : []
+      title:   document.querySelector('h1')?.textContent||'',
+      artist:  document.querySelector('p.text-gray-600')?.textContent.replace(/^By\s*/,'')||'',
+      album:   'SpeakLoudTTS'
     });
-
     navigator.mediaSession.setActionHandler('play',         () => audio.play());
     navigator.mediaSession.setActionHandler('pause',        () => audio.pause());
-    navigator.mediaSession.setActionHandler('seekbackward', () => audio.currentTime = Math.max(0, audio.currentTime - 15));
-    navigator.mediaSession.setActionHandler('seekforward',  () => audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30));
+    navigator.mediaSession.setActionHandler('seekbackward', () => audio.currentTime = Math.max(0, audio.currentTime-15));
+    navigator.mediaSession.setActionHandler('seekforward',  () => audio.currentTime = Math.min(audio.duration||0, audio.currentTime+30));
   }
+
+  // ——— Keyboard shortcuts —————————————————————————————————————
+  document.addEventListener('keydown', e => {
+    if (!audio) return;
+    switch(e.code) {
+      case 'Space':
+        e.preventDefault();
+        audio.paused ? audio.play() : audio.pause();
+        break;
+      case 'ArrowLeft':
+        audio.currentTime = Math.max(0, audio.currentTime - 15);
+        break;
+      case 'ArrowRight':
+        audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 30);
+        break;
+    }
+  });
 });
