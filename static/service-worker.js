@@ -1,52 +1,41 @@
-// Versioned cache name so we can update easily
+// static/service-worker.js
 const CACHE_NAME = 'slt-static-v1';
 const PRECACHE_URLS = [
   '/', 
-  '/static/css/tailwind.css', 
+  '/service-worker.js',
   '/static/js/app.js',
-  '/static/favicon.ico',
-  // add any other assets you want pre-cached
+  '/static/js/admin.js',
+  '/favicon.ico'
 ];
 
-// Install: cache shell
-self.addEventListener('install', event => {
-  event.waitUntil(
+self.addEventListener('install', e => {
+  e.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(PRECACHE_URLS))
       .then(() => self.skipWaiting())
   );
 });
 
-// Activate: clean up old caches
-self.addEventListener('activate', event => {
-  event.waitUntil(
+self.addEventListener('activate', e => {
+  e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(key => key !== CACHE_NAME)
-            .map(key => caches.delete(key))
-      )
+      Promise.all(keys.filter(k => k !== CACHE_NAME)
+                      .map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 
-// Fetch: serve from cache, fall back to network
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-  event.respondWith(
-    caches.match(event.request).then(cached => {
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  e.respondWith(
+    caches.match(e.request).then(cached => {
       if (cached) return cached;
-      return fetch(event.request).then(resp => {
-        // dynamically cache new GET responses
-        return caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, resp.clone());
-          return resp;
-        });
+      return fetch(e.request).then(resp => {
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, resp.clone()));
+        return resp;
       });
     }).catch(() => {
-      // optionally, return a fallback offline page for navigation requests
-      if (event.request.mode === 'navigate') {
-        return caches.match('/');
-      }
+      if (e.request.mode === 'navigate') return caches.match('/');
     })
   );
 });

@@ -22,7 +22,9 @@ AUDIO_CONFIG = texttospeech.AudioConfig(
 def _build_ssml(title: str, author: str, paragraphs: List[str]) -> List[str]:
     """
     Wrap paragraphs in SSML and chunk so each payload (with tags) stays under MAX_BYTES.
+    Only the first chunk includes the Title/By prefix.
     """
+    # SSML wrappers
     prefix = (
         "<speak>"
         f"<p><emphasis level='moderate'>Title:</emphasis> {title}. "
@@ -31,14 +33,16 @@ def _build_ssml(title: str, author: str, paragraphs: List[str]) -> List[str]:
     suffix = "</speak>"
 
     chunks = []
+    # start with prefix for the very first chunk
     current = prefix
 
     for p in paragraphs:
         block = f"<p>{p}</p><break time='300ms'/>"
-        # if adding this block would exceed MAX_BYTES once encoded, close & start new
+        # if adding this block would overflow, close current and start a new chunk
         if len((current + block + suffix).encode("utf-8")) > MAX_BYTES:
             chunks.append(current + suffix)
-            current = prefix + block
+            # subsequent chunks drop the prefix and start fresh
+            current = "<speak>" + block
         else:
             current += block
 
@@ -55,27 +59,22 @@ def synthesize_long_text(
     voice_name: str
 ) -> dict:
     """
-    Produces a single MP3 in GCS by:
-      1) Splitting text into paragraphs
-      2) Building SSML chunks under the byte limit
-      3) Calling Google TTS on each chunk
-      4) Merging via ffmpeg
-      5) Uploading to GCS
-
-    Returns a dict with:
-      - uri:            public URL of the MP3
-      - duration_secs:  audio length in seconds (if ffprobe available)
-      - char_count:     number of characters synthesized
+    Produces a single MP3 in GCS:
+      1) Splits text into paragraphs
+      2) Builds SSML chunks under the byte limit (first chunk has title/author)
+      3) Calls Google TTS on each chunk
+      4) Merges via ffmpeg
+      5) Uploads to GCS
     """
-    # 1) Paragraph split
+    # split into paragraphs
     paras = [p.strip() for p in full_text.split("\n\n") if p.strip()]
     if len(paras) <= 1:
         paras = [p for p in full_text.splitlines() if p.strip()]
 
-    # 2) Build SSML‐safe chunks
+    # build chunks
     ssml_chunks = _build_ssml(title, author, paras)
 
-    # 3) Synthesize each chunk to a temp file
+    # synthesize each chunk
     tmpdir    = tempfile.gettempdir()
     seg_paths = []
     for idx, ssml in enumerate(ssml_chunks):
@@ -92,7 +91,7 @@ def synthesize_long_text(
             f.write(resp.audio_content)
         seg_paths.append(path)
 
-    # 4) Concatenate via ffmpeg
+    # concatenate via ffmpeg
     list_file = os.path.join(tmpdir, f"{item_id}_list.txt")
     with open(list_file, "w") as f:
         for p in seg_paths:
@@ -106,7 +105,7 @@ def synthesize_long_text(
         "-c", "copy", merged
     ], check=True)
 
-    # 5) (Optional) probe for duration
+    # optional: probe for duration
     try:
         result = subprocess.run(
             [
@@ -124,7 +123,7 @@ def synthesize_long_text(
     except Exception:
         duration_secs = None
 
-    # 6) Upload to GCS
+    # upload to GCS
     blob = bucket.blob(f"{item_id}.mp3")
     blob.upload_from_filename(merged, content_type="audio/mpeg")
     uri = f"https://storage.googleapis.com/{GCS_BUCKET}/{item_id}.mp3"

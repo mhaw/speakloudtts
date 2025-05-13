@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=2">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}SpeakLoudTTS{% endblock %}</title>
 
@@ -32,9 +33,6 @@
       }
     }
   </script>
-
-  <!-- Favicon -->
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
 
   {% block head %}{% endblock %}
 </head>
@@ -72,7 +70,7 @@
       </a>
       <div class="mt-2 sm:mt-0 flex items-center space-x-4">
         <a href="/submit"
-           class="hover:text-gray-900 dark:hover:text-white {% if request.path == '/submit' %}underline{% endif %}">
+           class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/submit' %}underline{% endif %}">
           Submit
         </a>
         <a href="/items"
@@ -87,14 +85,8 @@
            class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/errors' %}underline{% endif %}">
           ⚠️ Errors
         </a>
-        <a href="/errors"
-           class="hover:text-gray-900 dark:hover:text-white
-                  {% if request.path == '/errors' %}underline{% endif %}">
-          ⚠️ Errors
-        </a>
         <a href="/admin"
-           class="hover:text-gray-900 dark:hover:text-white
-                  {% if request.path == '/admin' %}underline{% endif %}">
+           class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/admin' %}underline{% endif %}">
           🔧 Admin
         </a>
         <button id="help-toggle"
@@ -109,7 +101,7 @@
     </div>
   </nav>
 
-  <!-- Main -->
+  <!-- Main content -->
   <main id="main-content" class="container mx-auto px-4">
     {% block content %}{% endblock %}
   </main>
@@ -122,7 +114,6 @@
       html.classList.toggle('dark');
       localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
     });
-
     // Contextual help toggle
     document.getElementById('help-toggle').addEventListener('click', () => {
       document.getElementById('help-overlay').classList.remove('hidden');
@@ -131,23 +122,26 @@
       document.getElementById('help-overlay').classList.add('hidden');
       localStorage.setItem('helpSeen', 'true');
     });
-
-    // On first visit, show help overlay
     window.addEventListener('load', () => {
       if (!localStorage.getItem('helpSeen')) {
         document.getElementById('help-overlay').classList.remove('hidden');
       }
     });
-
     // Service Worker registration
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js')
+      navigator.serviceWorker.register('/service-worker.js?v=2')
         .catch(err => console.warn('SW registration failed:', err));
     }
   </script>
 
   <!-- App-specific JS -->
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-  {% block scripts %}{% endblock %}
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=2"></script>
+  {% block scripts %}
+    {# Optionally include admin.js or other page-specific scripts #}
+    {% if request.path == '/admin' %}
+      <script src="{{ url_for('static', filename='js/admin.js') }}?v=2"></script>
+    {% endif %}
+  {% endblock %}
+
 </body>
 </html>

@@ -1,31 +1,42 @@
-{# templates/admin.html #}
 {% extends "base.html" %}
+{% block title %}Admin · SpeakLoudTTS{% endblock %}
 
 {% block content %}
-  <h1 class="text-3xl font-bold mb-6">Admin Dashboard</h1>
+  <h1 class="text-2xl font-bold mb-4">Admin Dashboard</h1>
 
-  <!-- 1) Stats cards -->
-  <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    {# cards will be injected here by admin.js #}
+  <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <!-- injected by admin.js -->
   </div>
 
-  <!-- 2) Full articles table -->
-  <h2 class="text-2xl font-semibold mb-4">All Articles</h2>
+  <h2 class="text-lg font-semibold mb-2">All Articles</h2>
+
+  <!-- pagination controls -->
+  <div class="flex justify-between items-center mb-2 text-sm">
+    <button id="prev-page" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">← Prev</button>
+    <span>Page <span id="current-page">1</span></span>
+    <button id="next-page" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Next →</button>
+  </div>
+
   <div class="overflow-x-auto">
-    <table id="admin-table" class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
-      <thead class="bg-gray-100 dark:bg-gray-700 text-left text-sm text-gray-700 dark:text-gray-300">
+    <table id="admin-table"
+           class="table-auto w-full text-sm divide-y divide-gray-200 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-700">
         <tr>
-          <th class="px-4 py-2">ID</th>
-          <th class="px-4 py-2">Title</th>
-          <th class="px-4 py-2">Status</th>
-          <th class="px-4 py-2">Voice</th>
-          <th class="px-4 py-2">Published</th>
-          <th class="px-4 py-2">Tags</th>
-          <th class="px-4 py-2 text-center">Actions</th>
+          <!-- add data-key for sorting -->
+          <th class="px-2 py-1 cursor-pointer" data-key="id">ID</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="title">Title</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="status">Status</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="voice">Voice</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="publish_date">Published</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="reading_time_min">Length</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="submitted_ip">IP</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="processed_at">Processed</th>
+          <th class="px-2 py-1 cursor-pointer" data-key="file_size">Size</th>
+          <th class="px-2 py-1">Actions</th>
         </tr>
       </thead>
-      <tbody>
-        {# rows will be injected here by admin.js #}
+      <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+        <!-- rows injected by admin.js -->
       </tbody>
     </table>
   </div>
