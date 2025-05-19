@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v=2">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}SpeakLoudTTS{% endblock %}</title>
 
@@ -24,9 +24,7 @@
     tailwind.config = {
       darkMode: 'class',
       theme: {
-        extend: {
-          colors: { primary: '#2563eb' },
-        },
+        extend: { colors: { primary: '#2563eb' } },
         transitionProperty: {
           'colors': 'color, background-color, border-color, text-decoration-color, fill, stroke'
         }
@@ -34,7 +32,13 @@
     }
   </script>
 
+  <!-- Plyr stylesheet -->
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+
   {% block head %}{% endblock %}
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.css" />
+  <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.polyfilled.min.js"></script>
 </head>
 
 <body class="min-h-screen bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors">
@@ -106,6 +110,9 @@
     {% block content %}{% endblock %}
   </main>
 
+  <!-- Plyr script -->
+  <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+
   <!-- Global scripts -->
   <script>
     // Dark-mode toggle
@@ -114,7 +121,7 @@
       html.classList.toggle('dark');
       localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
     });
-    // Contextual help toggle
+    // Contextual help
     document.getElementById('help-toggle').addEventListener('click', () => {
       document.getElementById('help-overlay').classList.remove('hidden');
     });
@@ -127,21 +134,15 @@
         document.getElementById('help-overlay').classList.remove('hidden');
       }
     });
-    // Service Worker registration
+    // Service Worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js?v=2')
-        .catch(err => console.warn('SW registration failed:', err));
+      navigator.serviceWorker.register('/service-worker.js')
+        .catch(err => console.warn('SW failed:', err));
     }
   </script>
 
   <!-- App-specific JS -->
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=2"></script>
-  {% block scripts %}
-    {# Optionally include admin.js or other page-specific scripts #}
-    {% if request.path == '/admin' %}
-      <script src="{{ url_for('static', filename='js/admin.js') }}?v=2"></script>
-    {% endif %}
-  {% endblock %}
-
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

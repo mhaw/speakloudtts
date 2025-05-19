@@ -1,120 +1,80 @@
 // static/js/app.js
-document.addEventListener('DOMContentLoaded', () => {
-  const audio       = document.getElementById('audio-player');
-  if (!audio) return;
 
+// — Make sure you include Plyr’s CSS & JS in your base.html head, e.g.:
+// <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.css" />
+// <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.polyfilled.min.js"></script>
+
+document.addEventListener('DOMContentLoaded', () => {
+  // 1) Initialize Plyr on our audio element
+  const plyrPlayer = new Plyr('#audio-player', {
+    controls: ['play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'],
+    settings: ['speed','quality'],
+    speed: { selected: 1, options: [0.8, 1, 1.1, 1.25, 1.5] },
+  });
+
+  // 2) Elements & state
   const paras       = Array.from(document.querySelectorAll('#full-text .paragraph'));
   const progressBar = document.getElementById('audio-progress');
   const currentEl   = document.getElementById('current-time');
   const totalEl     = document.getElementById('total-time');
-  const speedBtns   = Array.from(document.querySelectorAll('.speed-btn'));
-  const rewindBtn   = document.getElementById('rewind-btn');
-  const forwardBtn  = document.getElementById('forward-btn');
   const storageKey  = `playbackPos-${window.location.pathname}`;
 
-  // Skip buttons
-  rewindBtn.addEventListener('click', () => {
-    audio.currentTime = Math.max(0, audio.currentTime - 15);
-  });
-  forwardBtn.addEventListener('click', () => {
-    audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30);
-  });
+  let boundaries = [], lastIdx = -1;
 
-  // Speed controls
-  const allowedRates = [0.8, 1.0, 1.1, 1.25, 1.5];
-  function setSpeed(rate) {
-    audio.playbackRate = rate;
-    localStorage.setItem('playbackRate', rate);
-    speedBtns.forEach(btn => {
-      const r = parseFloat(btn.dataset.rate);
-      if (!allowedRates.includes(r)) return btn.remove();
-      btn.classList.toggle('bg-primary', r === rate);
-    });
-  }
-  let savedRate = parseFloat(localStorage.getItem('playbackRate'));
-  if (!allowedRates.includes(savedRate)) savedRate = 1.0;
-  setSpeed(savedRate);
-  speedBtns.forEach(btn => {
-    const r = parseFloat(btn.dataset.rate);
-    if (allowedRates.includes(r)) {
-      btn.addEventListener('click', () => setSpeed(r));
-    }
-  });
-
-  // Highlight & progress
-  let boundaries = [];
-  audio.addEventListener('loadedmetadata', () => {
-    // restore pos
+  // 3) Compute boundaries once metadata is loaded
+  plyrPlayer.on('loadedmetadata', () => {
+    // restore last play position
     const saved = parseFloat(localStorage.getItem(storageKey));
-    if (!isNaN(saved)) audio.currentTime = Math.min(saved, audio.duration - 0.1);
+    if (!isNaN(saved)) plyrPlayer.currentTime = Math.min(saved, plyrPlayer.duration - 0.1);
 
-    // compute boundaries
+    // build time boundaries proportional to paragraph length
     const lengths  = paras.map(p => p.textContent.length);
-    const totalLen = lengths.reduce((a,b) => a+b, 0) || 1;
+    const totalLen = lengths.reduce((a, b) => a + b, 0) || 1;
     let acc = 0;
     boundaries = lengths.map(len => {
-      const t = (acc + len) / totalLen * audio.duration;
+      const t = (acc / totalLen) * plyrPlayer.duration;
       acc += len;
       return t;
     });
-    totalEl.textContent = formatTime(audio.duration);
+
+    // init progress UI
+    totalEl.textContent = formatTime(plyrPlayer.duration);
+    progressBar.max      = 100;
   });
 
-  audio.addEventListener('timeupdate', () => {
-    const t = audio.currentTime;
+  // 4) On timeupdate: highlight, save, update UI
+  plyrPlayer.on('timeupdate', () => {
+    const t = plyrPlayer.currentTime;
     localStorage.setItem(storageKey, t);
-    progressBar.value = (t / audio.duration) * 100;
     currentEl.textContent = formatTime(t);
+    progressBar.value     = (t / plyrPlayer.duration) * 100;
 
+    // only re-render when idx changes
     let idx = boundaries.findIndex(b => t <= b);
     if (idx < 0) idx = paras.length - 1;
-    paras.forEach((p,i) => {
-      const on = i === idx;
-      p.classList.toggle('bg-yellow-100', on);
-      p.classList.toggle('dark:bg-yellow-800', on);
-      p.classList.toggle('p-2', on);
-      p.classList.toggle('rounded', on);
-      if (on) p.scrollIntoView({ behavior:'smooth', block:'center' });
-    });
-  });
-
-  progressBar.addEventListener('click', e => {
-    const pct = e.offsetX / progressBar.offsetWidth;
-    audio.currentTime = pct * audio.duration;
-  });
-
-  function formatTime(sec) {
-    const m = Math.floor(sec/60), s = String(Math.floor(sec%60)).padStart(2,'0');
-    return `${m}:${s}`;
-  }
-
-  // MediaSession
-  if ('mediaSession' in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title:   document.querySelector('h1')?.textContent||'',
-      artist:  document.querySelector('p.text-gray-600')?.textContent.replace(/^By\s*/,'')||'',
-      album:   'SpeakLoudTTS'
-    });
-    navigator.mediaSession.setActionHandler('play',         () => audio.play());
-    navigator.mediaSession.setActionHandler('pause',        () => audio.pause());
-    navigator.mediaSession.setActionHandler('seekbackward', () => audio.currentTime = Math.max(0, audio.currentTime-15));
-    navigator.mediaSession.setActionHandler('seekforward',  () => audio.currentTime = Math.min(audio.duration||0, audio.currentTime+30));
-  }
-
-  // ——— Keyboard shortcuts —————————————————————————————————————
-  document.addEventListener('keydown', e => {
-    if (!audio) return;
-    switch(e.code) {
-      case 'Space':
-        e.preventDefault();
-        audio.paused ? audio.play() : audio.pause();
-        break;
-      case 'ArrowLeft':
-        audio.currentTime = Math.max(0, audio.currentTime - 15);
-        break;
-      case 'ArrowRight':
-        audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 30);
-        break;
+    if (idx !== lastIdx) {
+      paras.forEach((p,i) => {
+        const on = i===idx;
+        p.classList.toggle('bg-yellow-100', on);
+        p.classList.toggle('dark:bg-yellow-800', on);
+        p.classList.toggle('p-2', on);
+        p.classList.toggle('rounded', on);
+      });
+      paras[idx]?.scrollIntoView({ behavior:'smooth', block:'center' });
+      lastIdx = idx;
     }
   });
+
+  // 5) Click-to-seek via custom progress bar
+  progressBar.addEventListener('click', e => {
+    const pct = e.offsetX / progressBar.offsetWidth;
+    plyrPlayer.currentTime = pct * plyrPlayer.duration;
+  });
+
+  // 6) Utility: mm:ss formatting
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = String(Math.floor(sec % 60)).padStart(2,'0');
+    return `${m}:${s}`;
+  }
 });

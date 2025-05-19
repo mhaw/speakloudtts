@@ -4,17 +4,17 @@
   <title>{{ item.title }} | SpeakLoudTTS</title>
   <meta name="theme-color" content="#2563eb">
 
-  {# Open Graph & Twitter Player tags #}
-  <meta property="og:title"         content="{{ item.title }}">
-  <meta property="og:description"   content="Listen to the audio version of {{ item.title }}">
-  <meta property="og:url"           content="{{ request.url }}">
+  <!-- Open Graph & Twitter Player -->
+  <meta property="og:title"       content="{{ item.title }}">
+  <meta property="og:description" content="Listen to the audio version of {{ item.title }}">
+  <meta property="og:url"         content="{{ request.url }}">
   {% if item.favicon_url %}
-    <meta property="og:image"         content="{{ item.favicon_url }}">
+    <meta property="og:image" content="{{ item.favicon_url }}">
   {% endif %}
-  <meta property="og:type"          content="music.song">
-  <meta property="og:audio"         content="{{ item.audio_url }}">
-  <meta property="og:audio:type"    content="audio/mpeg">
-  <meta name="twitter:card"         content="player">
+  <meta property="og:type"      content="music.song">
+  <meta property="og:audio"     content="{{ item.audio_url }}">
+  <meta property="og:audio:type" content="audio/mpeg">
+  <meta name="twitter:card"       content="player">
   <meta name="twitter:player:stream" content="{{ item.audio_url }}">
 {% endblock %}
 
@@ -37,100 +37,46 @@
         </p>
       </div>
 
-      <!-- Player -->
+      <!-- Plyr Player -->
       <div class="flex-1 max-w-md w-full">
-        <audio id="audio-player"
-               controls
-               class="w-full h-14 rounded-lg shadow-sm"
-               preload="metadata"
-               src="{{ item.audio_url }}">
+        <audio
+          id="audio-player"
+          class="js-player"
+          controls
+          crossorigin
+          src="{{ item.audio_url }}"
+        >
           Your browser doesn’t support HTML5 audio.
         </audio>
-
-        <!-- Basic time display & skip buttons -->
-        <div class="flex items-center justify-between mt-2 text-sm space-x-2">
-          <button id="rewind-btn"
-                  aria-label="Rewind 15 seconds"
-                  class="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600">
-            « 15s
-          </button>
-          <div class="text-gray-700 dark:text-gray-300">
-            <span id="current-time">0:00</span>&nbsp;/&nbsp;<span id="total-time">0:00</span>
-          </div>
-          <button id="forward-btn"
-                  aria-label="Forward 30 seconds"
-                  class="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600">
-            30s »
-          </button>
-        </div>
-
-        <!-- Speed controls -->
-        <div class="flex flex-wrap items-center mt-2 gap-2 text-sm">
-          <span class="font-medium text-gray-700 dark:text-gray-300">Speed:</span>
-          {% for r in [0.8, 1.0, 1.1, 1.25, 1.5] %}
-            <button data-rate="{{ r }}"
-                    class="speed-btn px-2 py-1 border rounded dark:border-gray-600">
-              {{ "%.1f"|format(r) }}×
-            </button>
-          {% endfor %}
-        </div>
-
-        <!-- Progress bar -->
-        <progress id="audio-progress"
-                  value="0"
-                  max="100"
-                  class="w-full h-2 mt-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden">
-        </progress>
       </div>
     </div>
   </div>
 
   <div class="container mx-auto px-4 py-6 space-y-6">
-    <!-- Transcript actions -->
+    <!-- Transcript & share -->
     <div class="flex flex-wrap gap-4 text-sm">
-      <a href="/items/{{ item.id }}/text"
-         download="{{ item.id }}.txt"
-         class="text-primary hover:underline flex items-center gap-1">
+      <a href="/items/{{ item.id }}/text" download="{{ item.id }}.txt" class="text-primary hover:underline flex items-center gap-1">
         📄 Download Transcript
       </a>
-      <button id="copy-transcript"
-              class="text-primary hover:underline flex items-center gap-1">
-        📋 Copy Transcript
-      </button>
-      <button id="copy-article-url"
-              class="text-primary hover:underline flex items-center gap-1">
-        🔗 Copy article URL
-      </button>
-      <button id="copy-audio-url"
-              class="text-primary hover:underline flex items-center gap-1">
-        🎧 Copy audio link
-      </button>
-      <button id="copy-feed-url"
-              class="text-primary hover:underline flex items-center gap-1">
-        📰 Copy RSS feed URL
-      </button>
+      <button id="copy-transcript" class="text-primary hover:underline flex items-center gap-1">📋 Copy Transcript</button>
+      <button id="copy-article-url" class="text-primary hover:underline flex items-center gap-1">🔗 Copy article URL</button>
+      <button id="copy-audio-url" class="text-primary hover:underline flex items-center gap-1">🎧 Copy audio link</button>
+      <button id="copy-feed-url" class="text-primary hover:underline flex items-center gap-1">📰 Copy RSS feed URL</button>
     </div>
 
-    <!-- Metadata & tags -->
+    <!-- Metadata & Tags -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <details class="bg-white p-4 rounded shadow dark:bg-gray-800">
         <summary class="font-medium cursor-pointer">Metadata</summary>
         <ul class="mt-2 list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
           <li><strong>Original URL:</strong>
-            <a href="{{ item.url }}" target="_blank" class="text-primary hover:underline">
-              {{ item.url }}
-            </a>
+            <a href="{{ item.url }}" target="_blank" class="text-primary hover:underline">{{ item.url }}</a>
           </li>
           <li><strong>Last Modified:</strong> {{ item.last_modified or "–" }}</li>
           <li><strong>ETag:</strong> {{ item.etag or "–" }}</li>
-          {% if item.source %}
-            <li><strong>Source:</strong> {{ item.source }}</li>
-          {% endif %}
-          {% if item.favicon_url %}
-            <li><strong>Favicon:</strong>
-              <img src="{{ item.favicon_url }}" alt="favicon" class="inline-block w-4 h-4 ml-1">
-            </li>
-          {% endif %}
+          {% if item.domain %}<li><strong>Domain:</strong> {{ item.domain }}</li>{% endif %}
+          {% if item.publisher %}<li><strong>Publisher:</strong> {{ item.publisher }}</li>{% endif %}
+          {% if item.section %}<li><strong>Section:</strong> {{ item.section }}</li>{% endif %}
         </ul>
       </details>
 
@@ -140,27 +86,16 @@
           {% for tag in item.tags %}
             <span class="bg-gray-200 dark:bg-gray-700 text-sm px-2 py-1 rounded">{{ tag }}</span>
           {% endfor %}
-          {% if not item.tags %}
-            <span class="text-gray-500">None</span>
-          {% endif %}
+          {% if not item.tags %}<span class="text-gray-500">None</span>{% endif %}
         </div>
-        <button id="edit-tags-btn"
-                class="text-sm text-primary hover:underline">
-          ✏️ Edit Tags
-        </button>
+        <button id="edit-tags-btn" class="text-sm text-primary hover:underline">✏️ Edit Tags</button>
         <div id="tags-editor" class="mt-2 space-x-2 hidden">
           <input type="text" id="tags-input"
                  class="px-3 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
                  value="{{ item.tags|join(',') }}"
                  placeholder="comma,separated">
-          <button id="save-tags-btn"
-                  class="px-3 py-1 bg-green-600 text-white rounded">
-            Save
-          </button>
-          <button id="cancel-tags-btn"
-                  class="px-3 py-1 bg-gray-300 rounded">
-            Cancel
-          </button>
+          <button id="save-tags-btn" class="px-3 py-1 bg-green-600 text-white rounded">Save</button>
+          <button id="cancel-tags-btn" class="px-3 py-1 bg-gray-300 rounded">Cancel</button>
         </div>
       </div>
     </div>
@@ -182,6 +117,30 @@
 {% endblock %}
 
 {% block scripts %}
-  <script>window.SLTTS_ITEM_ID = "{{ item.id }}";</script>
-  <script src="{{ url_for('static', filename='js/detail.js') }}?v=2"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize Plyr
+      const player = new Plyr('#audio-player', {
+        controls: [
+          'play',
+          'rewind',
+          'fast-forward',
+          'progress',
+          'current-time',
+          'duration',
+          'mute',
+          'volume',
+          'settings',
+          'download'
+        ],
+        settings: ['speed'],
+        speed: {
+          selected: 1,
+          options: [0.8, 1, 1.1, 1.25, 1.5]
+        },
+        seekTime: 15
+      });
+      window.player = player;
+    });
+  </script>
 {% endblock %}

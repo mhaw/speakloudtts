@@ -4,40 +4,29 @@
 {% block content %}
   <h1 class="text-2xl font-bold mb-4">Admin Dashboard</h1>
 
-  <!-- Stats -->
+  <!-- stats cards -->
   <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-    <!-- injected by admin.js -->
+    <!-- injected by static/js/admin.js -->
   </div>
 
-  <!-- Controls: search, export CSV, bulk retry -->
-  <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center mb-4 space-y-2 md:space-y-0">
-    <div class="flex items-center space-x-2">
-      <input id="admin-search"
-             type="text"
-             placeholder="Search…"
-             class="px-3 py-1 border rounded focus:outline-none focus:ring"
-      />
-      <button id="bulk-retry-btn"
-              class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-      >↻ Retry Selected</button>
-    </div>
-    <div class="flex items-center space-x-2">
-      <button id="export-csv-btn"
-              class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
-      >⬇ Export CSV</button>
-      <div class="flex items-center space-x-1">
-        <button id="prev-page" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">← Prev</button>
-        <span>Page <span id="current-page">1</span></span>
-        <button id="next-page" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Next →</button>
-      </div>
-    </div>
+  <h2 class="text-lg font-semibold mb-2">All Articles</h2>
+
+  <!-- pagination controls -->
+  <div class="flex justify-between items-center mb-2 text-sm">
+    <button id="prev-page" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
+      ← Prev
+    </button>
+    <span>Page <span id="current-page">1</span></span>
+    <button id="next-page" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
+      Next →
+    </button>
   </div>
 
   <div class="overflow-x-auto">
-    <table id="admin-table" class="table-auto w-full text-sm divide-y dark:divide-gray-700">
+    <table id="admin-table"
+           class="table-auto w-full text-sm divide-y divide-gray-200 dark:divide-gray-700">
       <thead class="bg-gray-50 dark:bg-gray-700">
         <tr>
-          <th class="px-2 py-1"><input type="checkbox" id="select-all" /></th>
           <th class="px-2 py-1 cursor-pointer" data-key="id">ID</th>
           <th class="px-2 py-1 cursor-pointer" data-key="title">Title</th>
           <th class="px-2 py-1 cursor-pointer" data-key="status">Status</th>
@@ -50,8 +39,8 @@
           <th class="px-2 py-1">Actions</th>
         </tr>
       </thead>
-      <tbody class="bg-white dark:bg-gray-800 divide-y dark:divide-gray-700">
-        <!-- rows injected by admin.js -->
+      <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+        <!-- rows injected by static/js/admin.js -->
       </tbody>
     </table>
   </div>
