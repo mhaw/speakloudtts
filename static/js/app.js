@@ -77,4 +77,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = String(Math.floor(sec % 60)).padStart(2,'0');
     return `${m}:${s}`;
   }
+    // 1) Make the voice dropdown searchable
+    if (window.TomSelect) {
+      new TomSelect('#voice-select', {
+        create: false,
+        sortField: { field: 'text', direction: 'asc' }
+      });
+    }
+  
+    // 2) Edit toggle for extracted-text preview
+    const editBtn = document.getElementById('edit-toggle');
+    const textarea = document.getElementById('extracted-text');
+    if (editBtn && textarea) {
+      editBtn.addEventListener('click', () => {
+        textarea.readOnly = !textarea.readOnly;
+        textarea.classList.toggle('bg-white');
+        textarea.classList.toggle('bg-gray-800');
+        editBtn.textContent = textarea.readOnly ? 'Edit Text' : 'Lock Text';
+      });
+    }
 });

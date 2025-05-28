@@ -43,13 +43,13 @@
                    alt=""
                    class="w-4 h-4 rounded-sm flex-shrink-0">
             {% endif %}
-            <a href="/items/{{ it.id }}"
+            <a href="{{ url_for('item_detail', item_id=it.id) }}"
                class="hover:underline text-blue-600 dark:text-blue-400">
               {{ it.title }}
             </a>
           </td>
-          <td class="px-4 py-2">{{ it.author }}</td>
-          <td class="px-4 py-2">{{ it.date }}</td>
+          <td class="px-4 py-2">{{ it.author or "-" }}</td>
+          <td class="px-4 py-2">{{ it.date or "-" }}</td>
           <td class="px-4 py-2">{{ it.word_count }}</td>
           <td class="px-4 py-2">{{ it.reading_time }} min</td>
           <td class="px-4 py-2">
@@ -62,7 +62,7 @@
             </a>
           </td>
           <td class="px-4 py-2">
-            <a href="/items/{{ it.id }}"
+            <a href="{{ url_for('item_detail', item_id=it.id) }}"
                class="text-indigo-600 hover:underline dark:text-indigo-300">
               View
             </a>

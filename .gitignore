@@ -1,20 +1,28 @@
-# Virtual environment
-venv/
-
-# Python bytecode
+# Byte-compiled / caches
 __pycache__/
 *.py[cod]
+*$py.class
 
-# Credentials & secrets
+# Virtual environments
+venv/
+.env/
+.env.*   
+.Python
+
+# Credentials & config
 credentials.json
-.env
+cors.json
 
-# ffmpeg temp files
-*.mp3
+# One-off scripts & migration files
+assign_owner_and_backfill.py
+back-fill.py
+fix_errors.diff
 
-# VSCode
+# Editor / OS files
 .vscode/
-
-# macOS
+.idea/
 .DS_Store
-EOFspeakloudtts_git*
+*.swp
+
+# Logs
+*.log

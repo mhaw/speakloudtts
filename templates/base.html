@@ -35,10 +35,13 @@
   <!-- Plyr stylesheet -->
   <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
 
-  {% block head %}{% endblock %}
+  <!-- Tom Select for searchable selects -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css"
+    rel="stylesheet"
+  />
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.css" />
-  <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.polyfilled.min.js"></script>
+  {% block head %}{% endblock %}
 </head>
 
 <body class="min-h-screen bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors">
@@ -93,6 +96,18 @@
            class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/admin' %}underline{% endif %}">
           🔧 Admin
         </a>
+        {% if current_user.is_authenticated %}
+          <span class="px-4 text-gray-700 dark:text-gray-300">Hi, {{ current_user.username }}</span>
+          <a href="{{ url_for('logout') }}"
+             class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/logout' %}underline{% endif %}">
+            Logout
+          </a>
+        {% else %}
+          <a href="{{ url_for('login') }}"
+             class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/login' %}underline{% endif %}">
+            Login
+          </a>
+        {% endif %}
         <button id="help-toggle"
                 class="p-2 rounded bg-gray-200 dark:bg-gray-700 focus:outline-none"
                 aria-label="Show help">❔
@@ -143,6 +158,9 @@
 
   <!-- App-specific JS -->
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <!-- Tom Select JS (for searchable <select>) -->
+  <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

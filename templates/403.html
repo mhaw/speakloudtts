@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Forbidden{% endblock %}
+{% block content %}
+  <h1 class="text-3xl font-bold">403 Forbidden</h1>
+  <p>You don’t have permission to view this article.</p>
+  <a href="{{ url_for('items') }}" class="mt-4 inline-block text-primary">Back to all articles</a>
+{% endblock %}

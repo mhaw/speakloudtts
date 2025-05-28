@@ -31,7 +31,9 @@ self.addEventListener('fetch', e => {
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(resp => {
-        caches.open(CACHE_NAME).then(cache => cache.put(e.request, resp.clone()));
+        if (!resp.ok) return resp;
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
         return resp;
       });
     }).catch(() => {
