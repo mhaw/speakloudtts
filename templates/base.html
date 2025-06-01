@@ -6,116 +6,58 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}SpeakLoudTTS{% endblock %}</title>
 
-  <!-- Immediately apply persisted or system theme -->
-  <script>
-    try {
-      const stored = localStorage.theme;
-      if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch (_) {}
-  </script>
-
   <!-- Tailwind + Typography + Forms -->
   <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
-        extend: { colors: { primary: '#2563eb' } },
-        transitionProperty: {
-          'colors': 'color, background-color, border-color, text-decoration-color, fill, stroke'
-        }
+        extend: { colors: { primary: '#2563eb' } }
+      },
+      transitionProperty: {
+        'all': 'all'
       }
     }
   </script>
 
-  <!-- Plyr stylesheet -->
-  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <!-- Global micro-interactions (nav links, buttons) -->
+  <style>
+    .interactive {
+      transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+    }
+    .interactive:hover {
+      transform: scale(1.05);
+    }
+    .interactive:active {
+      opacity: 0.75;
+    }
+  </style>
 
-  <!-- Tom Select for searchable selects -->
-  <link
-    href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css"
-    rel="stylesheet"
-  />
-
+  <!-- Shared head blocks -->
   {% block head %}{% endblock %}
 </head>
 
-<body class="min-h-screen bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors">
-
-  <!-- Skip to content -->
-  <a href="#main-content"
-     class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-white px-4 py-2 rounded">
-    Skip to content
-  </a>
-
-  <!-- Contextual Help Overlay -->
-  <div id="help-overlay"
-       class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
-    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-lg w-full">
-      <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Welcome to SpeakLoudTTS</h2>
-      <p class="mb-4 text-gray-700 dark:text-gray-300">
-        Tap the 🎤 logo to return home, use the menu buttons to navigate,
-        and on article pages you'll see playback controls with skip buttons.
-      </p>
-      <button id="help-close"
-              class="mt-2 px-4 py-2 bg-primary text-white rounded hover:bg-blue-700">
-        Got it!
-      </button>
-    </div>
-  </div>
+<body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
 
   <!-- Navbar -->
-  <nav class="bg-white shadow mb-8 dark:bg-gray-800">
+  <nav class="interactive bg-white dark:bg-gray-800 shadow mb-8">
     <div class="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center">
-      <a href="/" class="flex items-center space-x-2 text-xl font-bold">
+      <a href="/" class="interactive flex items-center space-x-2 text-xl font-bold">
         <span role="img" aria-label="mic">🎤</span>
         <span>SpeakLoudTTS</span>
       </a>
       <div class="mt-2 sm:mt-0 flex items-center space-x-4">
-        <a href="/submit"
-           class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/submit' %}underline{% endif %}">
-          Submit
-        </a>
-        <a href="/items"
-           class="hover:text-gray-900 dark:hover:text-white {% if request.path.startswith('/items') %}underline{% endif %}">
-          All Articles
-        </a>
-        <a href="/feed.xml" title="RSS Feed"
-           class="hover:text-gray-900 dark:hover:text-white">
-          📰 Feed
-        </a>
-        <a href="/errors"
-           class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/errors' %}underline{% endif %}">
-          ⚠️ Errors
-        </a>
-        <a href="/admin"
-           class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/admin' %}underline{% endif %}">
-          🔧 Admin
-        </a>
+        <a href="/submit"      class="interactive hover:underline {% if request.path=='/submit' %}underline{% endif %}">Submit</a>
+        <a href="/items"       class="interactive hover:underline {% if request.path.startswith('/items') %}underline{% endif %}">All Articles</a>
+        <a href="/feed.xml"    class="interactive hover:underline">📰 Feed</a>
+        <a href="/errors"      class="interactive hover:underline {% if request.path=='/errors' %}underline{% endif %}">⚠️ Errors</a>
+        <a href="/admin"       class="interactive hover:underline {% if request.path=='/admin' %}underline{% endif %}">🔧 Admin</a>
         {% if current_user.is_authenticated %}
-          <span class="px-4 text-gray-700 dark:text-gray-300">Hi, {{ current_user.username }}</span>
-          <a href="{{ url_for('logout') }}"
-             class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/logout' %}underline{% endif %}">
-            Logout
-          </a>
+          <span class="px-4 dark:text-gray-300">Hi, {{ current_user.username }}</span>
+          <a href="{{ url_for('logout') }}" class="interactive hover:underline">Logout</a>
         {% else %}
-          <a href="{{ url_for('login') }}"
-             class="hover:text-gray-900 dark:hover:text-white {% if request.path=='/login' %}underline{% endif %}">
-            Login
-          </a>
+          <a href="{{ url_for('login') }}" class="interactive hover:underline">Login</a>
         {% endif %}
-        <button id="help-toggle"
-                class="p-2 rounded bg-gray-200 dark:bg-gray-700 focus:outline-none"
-                aria-label="Show help">❔
-        </button>
-        <button id="theme-toggle"
-                class="p-2 rounded bg-gray-200 dark:bg-gray-700 focus:outline-none"
-                aria-label="Toggle dark mode">🌓
-        </button>
       </div>
     </div>
   </nav>
@@ -125,42 +67,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Plyr script -->
-  <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
-
   <!-- Global scripts -->
-  <script>
-    // Dark-mode toggle
-    document.getElementById('theme-toggle').addEventListener('click', () => {
-      const html = document.documentElement;
-      html.classList.toggle('dark');
-      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
-    });
-    // Contextual help
-    document.getElementById('help-toggle').addEventListener('click', () => {
-      document.getElementById('help-overlay').classList.remove('hidden');
-    });
-    document.getElementById('help-close').addEventListener('click', () => {
-      document.getElementById('help-overlay').classList.add('hidden');
-      localStorage.setItem('helpSeen', 'true');
-    });
-    window.addEventListener('load', () => {
-      if (!localStorage.getItem('helpSeen')) {
-        document.getElementById('help-overlay').classList.remove('hidden');
-      }
-    });
-    // Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js')
-        .catch(err => console.warn('SW failed:', err));
-    }
-  </script>
-
-  <!-- App-specific JS -->
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-  <!-- Tom Select JS (for searchable <select>) -->
-  <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
-
   {% block scripts %}{% endblock %}
 </body>
 </html>

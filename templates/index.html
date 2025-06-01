@@ -1,10 +1,12 @@
 {% extends "base.html" %}
+{% block title %}Welcome · SpeakLoudTTS{% endblock %}
+
 {% block content %}
-  <div class="text-center py-20">
-    <h1 class="text-4xl font-bold mb-4">Welcome to SpeakLoudTTS</h1>
-    <p class="mb-8 text-lg">Convert articles into podcast‑ready audio, automatically.</p>
+  <div class="bg-gradient-to-r from-primary to-indigo-600 text-white py-20 px-6 rounded-b-lg mb-8">
+    <h1 class="text-4xl font-extrabold mb-4">Welcome to SpeakLoudTTS</h1>
+    <p class="text-lg mb-8">Convert articles into podcast-ready audio with ease.</p>
     <a href="/submit"
-       class="px-6 py-3 bg-blue-600 text-white rounded shadow hover:bg-blue-700">
+       class="interactive inline-block px-6 py-3 bg-white text-primary font-semibold rounded shadow hover:bg-gray-100">
       Submit a URL
     </a>
   </div>

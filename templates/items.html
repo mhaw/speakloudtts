@@ -1,92 +1,50 @@
 {% extends "base.html" %}
-
-{% block head %}
-  <title>All Articles | SpeakLoudTTS</title>
-  <meta name="theme-color" content="#2563eb">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="SpeakLoudTTS">
-{% endblock %}
+{% block title %}All Articles · SpeakLoudTTS{% endblock %}
 
 {% block content %}
-  <h2 class="text-2xl font-semibold mb-4">Processed Articles</h2>
+  <h2 class="text-2xl font-semibold mb-6">Processed Articles</h2>
 
-  <!-- Filter input -->
-  <div class="mb-4">
-    <input
-      id="filter-input"
-      type="text"
-      placeholder="Filter by title, author or tags…"
-      class="w-full px-4 py-2 border rounded focus:outline-none focus:ring"
-    />
-  </div>
+  <!-- Filter -->
+  <input id="filter-input"
+         type="text"
+         placeholder="Filter by title or author…"
+         class="interactive mb-6 w-full px-4 py-2 border rounded focus:outline-none focus:ring" />
 
-  <div class="overflow-x-auto">
-    <table class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
-      <thead class="bg-gray-100 dark:bg-gray-700">
-        <tr class="text-left">
-          <th class="px-4 py-2">Title</th>
-          <th class="px-4 py-2">Author</th>
-          <th class="px-4 py-2">Date</th>
-          <th class="px-4 py-2">Words</th>
-          <th class="px-4 py-2">Read Time</th>
-          <th class="px-4 py-2">Audio</th>
-          <th class="px-4 py-2">Download</th>
-          <th class="px-4 py-2">Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for it in items %}
-        <tr class="border-t">
-          <td class="px-4 py-2 flex items-center space-x-2">
-            {% if it.favicon_url %}
-              <img src="{{ it.favicon_url }}"
-                   alt=""
-                   class="w-4 h-4 rounded-sm flex-shrink-0">
-            {% endif %}
-            <a href="{{ url_for('item_detail', item_id=it.id) }}"
-               class="hover:underline text-blue-600 dark:text-blue-400">
+  <!-- Card Grid -->
+  <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    {% for it in items %}
+      <div class="interactive bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg p-6 flex flex-col justify-between">
+        <div>
+          <h3 class="text-lg font-semibold mb-2">
+            <a href="{{ url_for('item_detail', item_id=it.id) }}" class="hover:text-primary">
               {{ it.title }}
             </a>
-          </td>
-          <td class="px-4 py-2">{{ it.author or "-" }}</td>
-          <td class="px-4 py-2">{{ it.date or "-" }}</td>
-          <td class="px-4 py-2">{{ it.word_count }}</td>
-          <td class="px-4 py-2">{{ it.reading_time }} min</td>
-          <td class="px-4 py-2">
-            <audio controls preload="none" class="w-36" src="{{ it.audio_url }}"></audio>
-          </td>
-          <td class="px-4 py-2">
-            <a href="{{ it.audio_url }}" download
-               class="text-blue-600 hover:underline dark:text-blue-300">
-              Download
-            </a>
-          </td>
-          <td class="px-4 py-2">
-            <a href="{{ url_for('item_detail', item_id=it.id) }}"
-               class="text-indigo-600 hover:underline dark:text-indigo-300">
-              View
-            </a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          </h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            {{ it.author or "Unknown" }} • {{ it.date or "–" }} • {{ it.reading_time }} min read
+          </p>
+        </div>
+        <div class="flex items-center justify-between">
+          <audio controls class="w-32">
+            <source src="{{ it.audio_url }}" type="audio/mp3" />
+          </audio>
+          <a href="{{ it.audio_url }}" download class="interactive text-sm font-medium hover:underline text-primary">
+            Download
+          </a>
+        </div>
+      </div>
+    {% endfor %}
   </div>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=3"></script>
   <script>
-    // simple client-side filter
-    document.addEventListener('DOMContentLoaded', () => {
-      const input = document.getElementById('filter-input'),
-            rows  = Array.from(document.querySelectorAll('tbody tr'));
-      input.addEventListener('input', () => {
-        const q = input.value.trim().toLowerCase();
-        rows.forEach(r => {
-          r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
-        });
+    // simple filter for card grid
+    document.getElementById('filter-input').addEventListener('input', function(){
+      const q = this.value.trim().toLowerCase();
+      document.querySelectorAll('.grid > div').forEach(card => {
+        card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
       });
     });
   </script>
