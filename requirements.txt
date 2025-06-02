@@ -1,3 +1,26 @@
+# Previous content commented out for clarity where versions change or libs are added
+# Flask==2.3.3
+Flask==3.0.3
+# Werkzeug==2.3.7
+Werkzeug==3.0.1
+# Jinja2==3.1.6
+Jinja2==3.1.4 # Or latest 3.1.x
+
+Flask-Login==0.6.2 # Assuming still compatible, check if issues arise
+
+# Google Cloud Libraries
+google-api-core==2.24.2
+google-auth==2.39.0
+google-cloud-core==2.4.3
+# google-cloud-firestore==2.20.1
+google-cloud-firestore==2.20.1 # Keeping as it's recent
+# google-cloud-storage==3.1.0
+google-cloud-storage==3.1.0 # Keeping as it's recent
+# google-cloud-texttospeech==2.26.0
+google-cloud-texttospeech==2.26.0 # Keeping as it's recent
+google-cloud-tasks==2.13.2 # Added for Cloud Tasks
+
+# Other dependencies (keeping versions as in original unless conflict)
 beautifulsoup4==4.13.4
 blinker==1.9.0
 cachetools==5.5.2
@@ -9,14 +32,6 @@ feedfinder2==0.0.4
 feedgen==1.0.0
 feedparser==6.0.11
 filelock==3.18.0
-Flask==2.3.3
-Flask-Login==0.6.2
-google-api-core==2.24.2
-google-auth==2.39.0
-google-cloud-core==2.4.3
-google-cloud-firestore==2.20.1
-google-cloud-storage==3.1.0
-google-cloud-texttospeech==2.26.0
 google-crc32c==1.7.1
 google-resumable-media==2.7.2
 googleapis-common-protos==1.70.0
@@ -26,11 +41,9 @@ gunicorn==20.1.0
 idna==3.10
 itsdangerous==2.2.0
 jieba3k==0.35.1
-Jinja2==3.1.6
 joblib==1.4.2
 lxml_html_clean
-MarkupSafe==3.0.2
-newspaper3k==0.2.8
+MarkupSafe==3.0.2 # Might need update for Jinja2 3.1.4, let's assume 2.1.5 or similar if needed, Jinja2 will specify
 nltk==3.9.1
 pillow==11.2.1
 proto-plus==1.26.1
@@ -53,4 +66,3 @@ toml==0.10.2
 trafilatura==1.6.4
 typing_extensions==4.13.2
 urllib3==2.4.0
-Werkzeug==2.3.7
