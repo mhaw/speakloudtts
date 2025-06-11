@@ -1,26 +1,22 @@
-# Previous content commented out for clarity where versions change or libs are added
-# Flask==2.3.3
 Flask==3.0.3
-# Werkzeug==2.3.7
 Werkzeug==3.0.1
-# Jinja2==3.1.6
-Jinja2==3.1.4 # Or latest 3.1.x
+Jinja2==3.1.4
+Flask-Login==0.6.3
+newspaper3k==0.2.8
 
-Flask-Login==0.6.2 # Assuming still compatible, check if issues arise
-
-# Google Cloud Libraries
+# Core Google / gRPC related libraries - pinned to versions for better compatibility
 google-api-core==2.24.2
 google-auth==2.39.0
 google-cloud-core==2.4.3
-# google-cloud-firestore==2.20.1
-google-cloud-firestore==2.20.1 # Keeping as it's recent
-# google-cloud-storage==3.1.0
-google-cloud-storage==3.1.0 # Keeping as it's recent
-# google-cloud-texttospeech==2.26.0
-google-cloud-texttospeech==2.26.0 # Keeping as it's recent
-google-cloud-tasks==2.13.2 # Added for Cloud Tasks
+google-cloud-firestore==2.20.1
+google-cloud-storage==3.1.0
+google-cloud-texttospeech==2.26.0
+google-cloud-tasks==2.13.2
+googleapis-common-protos==1.70.0 # Often a dependency, good to pin
+grpcio==1.59.3                   # Older version, often more compatible with protobuf 4.x
+protobuf==4.25.3                 # To satisfy google-cloud-tasks and be compatible with grpcio 1.59.x
 
-# Other dependencies (keeping versions as in original unless conflict)
+# Other dependencies from your list
 beautifulsoup4==4.13.4
 blinker==1.9.0
 cachetools==5.5.2
@@ -32,22 +28,21 @@ feedfinder2==0.0.4
 feedgen==1.0.0
 feedparser==6.0.11
 filelock==3.18.0
-google-crc32c==1.7.1
-google-resumable-media==2.7.2
-googleapis-common-protos==1.70.0
-grpcio==1.71.0
-grpcio-status==1.71.0
+google-crc32c==1.7.1             # Dependency for google-cloud-storage
+google-resumable-media==2.7.2    # Dependency for google-cloud-storage
+# grpcio-status is a dependency of grpcio, so we don't pin it separately
 gunicorn==20.1.0
 idna==3.10
 itsdangerous==2.2.0
 jieba3k==0.35.1
 joblib==1.4.2
-lxml_html_clean
-MarkupSafe==3.0.2 # Might need update for Jinja2 3.1.4, let's assume 2.1.5 or similar if needed, Jinja2 will specify
+lxml_html_clean                 # This package is often 'lxml-html-clean' on PyPI if it's a direct dep.
+                                # If it's 'lxml' you need, it's just 'lxml'.
+                                # Assuming it's as written for now.
+MarkupSafe==3.0.2               # Jinja2 3.1.4 requires MarkupSafe>=2.0, so 3.0.2 is fine.
 nltk==3.9.1
 pillow==11.2.1
-proto-plus==1.26.1
-protobuf==5.29.4
+proto-plus==1.26.1              # Often a dependency of google-cloud libs
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 python-dateutil==2.9.0.post0

@@ -98,6 +98,16 @@ gcloud run deploy speakloudtts \
   --allow-unauthenticated \
   --set-env-vars GCS_BUCKET_NAME=your-gcs-bucket-name
 
+  ## ☁️ Google Cloud Tasks Setup (for Asynchronous TTS Processing)
+
+To handle Text-to-Speech (TTS) synthesis asynchronously, this application uses Google Cloud Tasks. This prevents HTTP timeouts for long articles and improves user experience. You'll need to configure a Cloud Tasks queue and set the appropriate IAM permissions.
+
+### 1. Enable Cloud Tasks API
+
+Ensure the Cloud Tasks API is enabled for your Google Cloud Project. You can do this via the Google Cloud Console or using the gcloud CLI:
+```bash
+gcloud services enable cloudtasks.googleapis.com
+
 
 ⸻
 

@@ -581,18 +581,30 @@ def list_errors(): #
     logger.debug(f"Rendering errors page for user {user_id} with {len(errors)} error items.")
     return render_template("errors.html", errors=errors) #
 
-@app.route("/admin", methods=["GET"]) #
-@login_required #
-def admin_dashboard(): #
+@app.route("/admin", methods=["GET"])
+@login_required
+def admin_dashboard():
     user_id = current_user.id
-    # Proper admin check needed here:
-    # if not current_user.is_admin: # Assuming User object has is_admin
-    #     logger.warning(f"User {user_id} ({current_user.username}) attempted to access /admin without privileges.")
-    #     return render_template("403.html"), 403
     logger.info(f"User {user_id} ({current_user.username}) accessed /admin dashboard.")
-    # Admin dashboard logic to be implemented (fetch stats, all items etc.)
-    return render_template("admin.html") #
+    
+    if not db:
+        logger.error("Admin Dashboard: Firestore client not available.")
+        return "Error loading admin dashboard: Database unavailable", 503
 
+    try:
+        items_query = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(100)
+        all_items = []
+        for doc in items_query.stream():
+            item = doc.to_dict()
+            if isinstance(item.get("submitted_at"), datetime):
+                item["submitted_at_fmt"] = item["submitted_at"].strftime("%Y-%m-%d %H:%M")
+            all_items.append(item)
+        
+        return render_template("admin.html", items=all_items)
+    except Exception as e:
+        logger.error(f"Error loading admin dashboard: {e}", exc_info=True)
+        return "Error loading admin dashboard", 500
+    
 # ─── RSS & Health ─────────────────────────────────────────────────────────
 @app.route("/feed.xml", methods=["GET"]) #
 def rss_feed(): #
