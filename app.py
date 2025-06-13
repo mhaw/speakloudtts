@@ -9,8 +9,9 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 
 from google.cloud import firestore
 from google.cloud import storage
-from google.cloud import tasks_v2 # Added for Cloud Tasks
-from google.protobuf import duration_pb2, timestamp_pb2 # For Cloud Tasks scheduling
+from google.cloud import tasks_v2  # Added for Cloud Tasks
+from google.protobuf import duration_pb2, timestamp_pb2  # For Cloud Tasks scheduling
+from dateutil import parser as dateparser
 
 # Assuming these custom modules are in the same directory or accessible via PYTHONPATH
 from your_user_module import User # implements User.get() and User.authenticate()
@@ -572,14 +573,43 @@ def list_errors(): #
     if not db: 
         logger.error("Errors Page: Firestore client not available.")
         return "Error loading errors: Database unavailable", 503
-    errors_query = db.collection("items") \
-                     .where("user_id", "==", user_id) \
-                     .where("status", "==", "error") \
-                     .order_by("submitted_at", direction=firestore.Query.DESCENDING) \
-                     .limit(50)
-    errors = [doc.to_dict() for doc in errors_query.stream()] #
-    logger.debug(f"Rendering errors page for user {user_id} with {len(errors)} error items.")
-    return render_template("errors.html", errors=errors) #
+    docs = (
+        db.collection("items")
+        .where("user_id", "==", user_id)
+        .where("status", "==", "error")
+        .stream()
+    )
+
+    errors = []
+    for d in docs:
+        data = d.to_dict()
+        errors.append(
+            {
+                "id": d.id,
+                "url": data.get("url", ""),
+                "title": data.get("title", "<no title>"),
+                "failed_at": data.get("submitted_at"),
+                "error": data.get("error_message", "<no message>"),
+            }
+        )
+
+    errors.sort(key=lambda e: e.get("failed_at") or "", reverse=True)
+
+    for e in errors:
+        try:
+            ts = e["failed_at"]
+            if isinstance(ts, datetime):
+                dt = ts
+            else:
+                dt = dateparser.isoparse(str(ts)) if ts else None
+            e["failed_at_fmt"] = dt.strftime("%b %d %Y %H:%M") if dt else "—"
+        except Exception:
+            e["failed_at_fmt"] = e.get("failed_at") or "—"
+
+    logger.debug(
+        f"Rendering errors page for user {user_id} with {len(errors)} error items."
+    )
+    return render_template("errors.html", errors=errors)
 
 @app.route("/admin", methods=["GET"])
 @login_required
