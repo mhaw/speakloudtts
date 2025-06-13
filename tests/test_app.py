@@ -31,6 +31,8 @@ def use_test_client(monkeypatch, tmp_path):
         def __init__(self):
             # Give a constant dummy ID for testing
             self.id = "dummy-item-id"
+            # Mimic Firestore DocumentSnapshot.exists attribute
+            self.exists = False
 
         def set(self, data):
             return None
@@ -38,7 +40,10 @@ def use_test_client(monkeypatch, tmp_path):
         def update(self, data):
             return None
 
-        @property
+        def get(self):
+            """Return self to mimic Firestore's document reference .get()."""
+            return self
+
         def to_dict(self):
             return {}
 
