@@ -23,7 +23,7 @@
 - **RSS Feed**  
   Automatic `/feed.xml` podcast feed (no iTunes-specific tags) sorted by original publish date.
 
-- **Firestore + FireStorage**  
+- **Firestore + Cloud Storage**  
   Metadata in Firestore (status, tags, voice choice, timestamps, IPs) + MP3s in a GCS bucket.
 
 ---
