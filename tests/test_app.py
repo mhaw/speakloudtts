@@ -31,16 +31,31 @@ def use_test_client(monkeypatch, tmp_path):
         def __init__(self):
             # Give a constant dummy ID for testing
             self.id = "dummy-item-id"
+            # Simulate stored document data with a matching user_id
+            self._data = {"user_id": "test-user-id", "tags": []}
 
         def set(self, data):
+            self._data = data
             return None
 
         def update(self, data):
+            self._data.update(data)
             return None
+
+        def get(self):
+            class DummySnapshot:
+                def __init__(self, data):
+                    self._data = data
+                    self.exists = True
+
+                def to_dict(self):
+                    return self._data
+
+            return DummySnapshot(self._data)
 
         @property
         def to_dict(self):
-            return {}
+            return self._data
 
     class DummyQuery:
         def order_by(self, *args, **kwargs):
@@ -264,3 +279,16 @@ def test_rss_and_health_endpoints(client):
     assert resp2.status_code == 200
     assert resp2.is_json
     assert resp2.json.get("status") == "ok"
+
+
+# ─── TEST: Update item tags via API ───────────────────────────────────────────
+def test_update_item_tags(client, fake_user):
+    # first log in
+    client.post("/login", data={"username": "test", "password": "test"})
+
+    payload = {"tags": ["news", "tech"]}
+    resp = client.post("/api/items/dummy-item-id/tags", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.is_json
+    assert resp.json.get("tags") == payload["tags"]
