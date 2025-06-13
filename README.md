@@ -129,7 +129,7 @@ DEFAULT_VOICE	Fallback voice if none is selected or invalid
 	•	GET /items/<id> → detail & player
 	•	GET /errors → list & retry failures
 	•	JSON API
-	•	POST /submit → { url, voice_name } → { item_id, tts_uri }
+	•	POST /submit → { url, voice_name } → { message, item_id } (confirmation, not tts_uri)
 	•	GET  /api/recent → latest 5 done items
 	•	GET  /api/items → paginated, filterable list
 	•	PUT  /api/items/<id>/tags → update tags
