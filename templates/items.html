@@ -1,51 +1,35 @@
 {% extends "base.html" %}
+
 {% block title %}All Articles · SpeakLoudTTS{% endblock %}
 
 {% block content %}
-  <h2 class="text-2xl font-semibold mb-6">Processed Articles</h2>
-
-  <!-- Filter -->
-  <input id="filter-input"
-         type="text"
-         placeholder="Filter by title or author…"
-         class="interactive mb-6 w-full px-4 py-2 border rounded focus:outline-none focus:ring" />
-
-  <!-- Card Grid -->
-  <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-    {% for it in items %}
-      <div class="interactive bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg p-6 flex flex-col justify-between">
-        <div>
-          <h3 class="text-lg font-semibold mb-2">
-            <a href="{{ url_for('item_detail', item_id=it.id) }}" class="hover:text-primary">
-              {{ it.title }}
-            </a>
-          </h3>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            {{ it.author or "Unknown" }} • {{ it.date or "–" }} • {{ it.reading_time }} min read
-          </p>
-        </div>
-        <div class="flex items-center justify-between">
-          <audio controls class="w-32">
-            <source src="{{ it.audio_url }}" type="audio/mp3" />
-          </audio>
-          <a href="{{ it.audio_url }}" download class="interactive text-sm font-medium hover:underline text-primary">
-            Download
-          </a>
-        </div>
-      </div>
-    {% endfor %}
+  <div class="container mx-auto py-8">
+    <h2 class="text-2xl font-semibold mb-4">All Articles</h2>
+    <table class="w-full table-auto">
+      <thead>
+        <tr>
+          <th class="text-left px-4 py-2">Title</th>
+          <th class="text-left px-4 py-2">Submitted</th>
+          <th class="text-left px-4 py-2">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+          <tr>
+            <td class="px-4 py-2">
+              <a href="{{ url_for('item_detail', item_id=it['id']) }}" class="text-primary hover:underline">
+                {{ it.title or "Untitled" }}
+              </a>
+            </td>
+            <td class="px-4 py-2">{{ it.submitted_at_fmt }}</td>
+            <td class="px-4 py-2">{{ it.status|capitalize }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="3" class="text-center text-gray-400 py-6">No items yet.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-{% endblock %}
-
-{% block scripts %}
-  {{ super() }}
-  <script>
-    // simple filter for card grid
-    document.getElementById('filter-input').addEventListener('input', function(){
-      const q = this.value.trim().toLowerCase();
-      document.querySelectorAll('.grid > div').forEach(card => {
-        card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
-      });
-    });
-  </script>
 {% endblock %}

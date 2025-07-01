@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block head %}
+  <title>{{ item.title }} | SpeakLoudTTS</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#2563eb">
+  <meta property="og:title" content="{{ item.title }}">
+  <meta property="og:description" content="Listen to the audio version of '{{ item.title }}' by {{ item.author or 'Unknown' }} on SpeakLoudTTS.">
+  <meta property="og:url" content="{{ request.url }}">
+  {% if item.favicon_url %}
+    <meta property="og:image" content="{{ item.favicon_url }}">
+    <link rel="image_src" href="{{ item.favicon_url }}">
+  {% endif %}
+  <meta property="og:type" content="music.song">
+  <meta property="og:audio" content="{{ item.audio_url }}">
+  <meta property="og:audio:type" content="audio/mpeg">
+  <meta name="twitter:card" content="player">
+  <meta name="twitter:title" content="{{ item.title }}">
+  <meta name="twitter:description" content="Audio version of '{{ item.title }}'.">
+  <meta name="twitter:player:stream" content="{{ item.audio_url }}">
+  <meta name="twitter:player:stream:content_type" content="audio/mpeg">
+  <meta name="apple-mobile-web-app-title" content="{{ item.title }}">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="HandheldFriendly" content="True">
+{% endblock %}
+
+{% block content %}
+<div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
+  <div class="max-w-2xl mx-auto px-4 py-4 flex flex-col gap-2">
+    <a href="{{ url_for('list_items') }}" class="text-sm text-gray-500 hover:text-primary mb-1">
+      ← Back to all articles
+    </a>
+    <h1 class="text-2xl sm:text-3xl font-bold text-primary mb-1">{{ item.title }}</h1>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:gap-4 text-gray-600 dark:text-gray-400 text-sm mb-2">
+      <span>By <strong>{{ item.author or "Unknown" }}</strong></span>
+      {% if item.publish_date_fmt %}<span class="hidden sm:inline">|</span><span>{{ item.publish_date_fmt }}</span>{% endif %}
+      {% if item.word_count %}<span class="hidden sm:inline">|</span><span>{{ item.word_count }} words</span>{% endif %}
+      {% if item.reading_time_min %}<span class="hidden sm:inline">|</span><span>~{{ item.reading_time_min }} min read</span>{% endif %}
+    </div>
+    <div class="w-full flex items-center justify-center p-2 bg-gray-100 dark:bg-gray-800 rounded">
+      <audio
+        id="audio-player"
+        controls
+        preload="auto"
+        class="w-full"
+        style="max-width: 600px;"
+        src="{{ item.audio_url }}">
+        Your browser doesn’t support audio playback.
+      </audio>
+    </div>
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3 mt-2 mb-3">
+      <a href="{{ item.audio_url }}" download="{{ item.title|replace(' ', '_') }}.mp3"
+         class="inline-flex items-center px-3 py-1 bg-primary text-white rounded shadow hover:bg-blue-700 text-sm">
+        ⬇ Download Audio
+      </a>
+      <form method="POST" action="{{ url_for('update_tags', item_id=item.id) }}" class="flex items-center gap-2 w-full sm:w-auto">
+        <input type="text" name="tags" value="{{ tags|join(', ') }}" placeholder="comma,separated"
+               class="px-3 py-1 border rounded dark:bg-gray-800 dark:border-gray-600 text-sm w-full sm:w-56" autocomplete="off">
+        <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded text-sm">Save Tags</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="max-w-2xl mx-auto px-4 py-4 space-y-4">
+  <details class="bg-white dark:bg-gray-800 p-3 rounded shadow mb-2" open>
+    <summary class="font-medium cursor-pointer">Metadata</summary>
+    <ul class="mt-2 list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
+      <li><strong>Original URL:</strong>
+        <a href="{{ item.url }}" target="_blank" class="text-primary hover:underline break-all">{{ item.url }}</a>
+      </li>
+      <li><strong>Last Modified:</strong> {{ item.last_modified or "–" }}</li>
+      <li><strong>ETag:</strong> {{ item.etag or "–" }}</li>
+      {% if item.domain %}<li><strong>Domain:</strong> {{ item.domain }}</li>{% endif %}
+      {% if item.publisher %}<li><strong>Publisher:</strong> {{ item.publisher }}</li>{% endif %}
+      {% if item.section %}<li><strong>Section:</strong> {{ item.section }}</li>{% endif %}
+    </ul>
+  </details>
+
+  <div>
+    <label class="block font-medium mb-1">Tags:</label>
+    <div class="flex flex-wrap gap-2 mb-2">
+      {% for tag in tags %}
+        <span class="bg-gray-200 dark:bg-gray-700 text-xs px-2 py-1 rounded">{{ tag }}</span>
+      {% else %}
+        <span class="text-gray-400 text-xs">None</span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <article id="full-text" class="prose prose-base sm:prose-lg dark:prose-invert max-w-none bg-white dark:bg-gray-800 p-4 rounded shadow">
+    {% for para in paragraphs %}
+      {% if para.strip() %}
+        <p>{{ para | e }}</p>
+      {% endif %}
+    {% else %}
+      <p class="text-gray-500"><em>No article text available.</em></p>
+    {% endfor %}
+  </article>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <!-- Minimal or no JS for maximum compatibility. If you want analytics, add here. -->
+{% endblock %}

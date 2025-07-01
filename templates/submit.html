@@ -2,92 +2,54 @@
 
 {% block title %}Submit Article · SpeakLoudTTS{% endblock %}
 
-{% block head %}
-  {{ super() }} <style>
-    /* Optional: Minor style adjustments for TomSelect if needed */
-    .ts-control {
-      padding: 0.5rem 0.75rem; /* Match Tailwind form input padding */
-      border-radius: 0.375rem; /* Match Tailwind rounded-md */
-      border-color: #d1d5db; /* Match Tailwind border-gray-300 */
-    }
-    .dark .ts-control {
-        background-color: #374151; /* bg-gray-700 */
-        border-color: #4b5563; /* border-gray-600 */
-        color: #f3f4f6; /* text-gray-100 */
-    }
-    .dark .ts-dropdown {
-        background-color: #374151;
-        border-color: #4b5563;
-    }
-    .dark .ts-dropdown .option {
-        color: #f3f4f6;
-    }
-    .dark .ts-dropdown .option:hover {
-        background-color: #4b5563;
-    }
-    .dark .ts-dropdown .active {
-        background-color: #2563eb; /* primary color */
-        color: white;
-    }
-  </style>
-{% endblock %}
-
 {% block content %}
   <div class="max-w-xl mx-auto py-8 space-y-6">
     <h2 class="text-2xl font-semibold text-center">Submit an Article URL</h2>
-    <form id="submit-form" class="space-y-4">
+    <form id="submit-form" method="post" class="space-y-4">
       <div>
         <label for="url-input" class="block mb-1 font-medium text-gray-700 dark:text-gray-300">Article URL</label>
         <input
           type="url"
           id="url-input"
-          name="url" {# Added name attribute for potential non-JS submission or form data access #}
+          name="url"
           required
           placeholder="https://example.com/path/to/article"
-          class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:focus:border-primary"
+          class="w-full px-4 py-2 border border-gray-300 rounded-md"
         />
       </div>
-
       <div>
         <label for="voice-select" class="block mb-1 font-medium text-gray-700 dark:text-gray-300">Choose Voice</label>
-        <select id="voice-select" name="voice_name" {# Added name attribute #}
-                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:focus:border-primary">
-          {% for v_id in voices %} {# Assuming voices is a list of voice IDs from app.py #}
+        <select id="voice-select" name="voice" class="w-full px-4 py-2 border border-gray-300 rounded-md">
+          {% for v_id in voices %}
             <option value="{{ v_id }}" {% if v_id == default_voice %}selected{% endif %}>
-              {{ v_id.replace('-', ' ').replace('_', ' ') | title }} {# Basic formatting for display #}
+              {{ v_id.replace('-', ' ').replace('_', ' ') | title }}
             </option>
           {% endfor %}
         </select>
       </div>
-
       <div>
         <label for="tags-input" class="block mb-1 font-medium text-gray-700 dark:text-gray-300">Tags (comma-separated, optional)</label>
         <input
           type="text"
           id="tags-input"
-          name="tags" {# Added name attribute #}
+          name="tags"
           placeholder="news, tech, interesting"
-          class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:focus:border-primary"
+          class="w-full px-4 py-2 border border-gray-300 rounded-md"
         />
       </div>
-
       <button
         type="submit"
         id="submit-btn"
-        class="w-full flex items-center justify-center px-4 py-2.5 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 interactive transition duration-150 ease-in-out disabled:opacity-50"
+        class="w-full px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700"
       >
-        <svg id="btn-spinner" class="hidden animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <span id="btn-text">Convert to Audio</span>
+        Convert to Audio
       </button>
-
-      <div id="status" class="min-h-[2em] text-center text-sm py-2">
-        </div>
+      <div id="status" class="min-h-[2em] text-center text-sm py-2"></div>
     </form>
   </div>
 {% endblock %}
 
 {% block scripts %}
-  {{ super() }} <script src="{{ url_for('static', filename='js/submit.js') }}?v={{ range(1, 10000) | random }}"></script> {% endblock %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/submit.js') }}"></script>
+{% endblock %}

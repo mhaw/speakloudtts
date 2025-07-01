@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  speakloudaudio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: speakloudaudio_cloud:latest
+    container_name: speakloudaudio_cloud
+    ports:
+      - "8085:8080"
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: "/app/credentials.json"
+      GCS_BUCKET_NAME: "speakloudaudio"
+      TTS_LANGUAGE_CODE: "en-US"
+      TTS_VOICE_GENDER: "NEUTRAL"
+      SECRET_KEY: "R8RknT4XdzqwWslx2sYrbQgbA8rEzj4jh9qxu7rFVk2025"
+      FIRESTORE_PROJECT_ID: "speakloudaudio"
+      LOG_LEVEL: "DEBUG"
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./downloads:/app/downloads
+    restart: unless-stopped

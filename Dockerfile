@@ -23,7 +23,6 @@ COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-
 # ─── Final Stage ─────────────────────────────────────────────────────────
 FROM python:3.10-slim AS runner
 
@@ -47,7 +46,14 @@ COPY --from=builder /install /usr/local
 # Copy app code
 COPY . .
 
+# ─── Generate Build ID ───────────────────────────────────────────────────
+# This uses sh to generate a build id like '07012025_wolf_blitzer'
+RUN BUILD_ID="$(date +%m%d%Y)_$(shuf -n1 -e wolf_blitzer jack_handey alec_baldwin bill_murray taylor_swift tony_stark rihanna lizzo the_bear morrissey joan_didion sue_bird)" && \
+    echo "$BUILD_ID" > BUILD_INFO && \
+    echo "export BUILD_ID=$BUILD_ID" >> /etc/profile
+
 ENV PORT=8080 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    BUILD_ID_FILE=/app/BUILD_INFO
 
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
