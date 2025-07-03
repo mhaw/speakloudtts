@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="Convert articles into high-quality audio with SpeakLoudTTS.">
-  <title>{% block title %}SpeakLoudTTS{% endblock %}</title>
+  <title>{% block title %}SpeakLoudTTS{% endblock %} | SpeakLoudTTS</title>
 
   <!-- Tailwind + Typography + Forms -->
   <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
@@ -16,9 +16,7 @@
       theme: {
         extend: { colors: { primary: '#2563eb' } }
       },
-      transitionProperty: {
-        'all': 'all'
-      }
+      transitionProperty: { 'all': 'all' }
     }
   </script>
 
@@ -67,7 +65,7 @@
         <a href="/items" class="interactive hover:underline {% if request.path.startswith('/items') %}underline{% endif %}" {% if request.path.startswith('/items') %}aria-current="page"{% endif %}>All Articles</a>
         <a href="/feed.xml" class="interactive hover:underline">📰 Feed</a>
         <a href="/errors" class="interactive hover:underline {% if request.path=='/errors' %}underline{% endif %}" {% if request.path=='/errors' %}aria-current="page"{% endif %}>⚠️ Errors</a>
-        <a href="/admin" class="interactive hover:underline {% if request.path=='/admin' %}underline{% endif %}" {% if request.path=='/admin' %}aria-current="page"{% endif %}>🔧 Admin</a>
+        <a href="/admin" class="interactive hover:underline {% if request.path.startswith('/admin') %}underline{% endif %}" {% if request.path.startswith('/admin') %}aria-current="page"{% endif %}>🔧 Admin</a>
         {% if current_user.is_authenticated %}
           <span class="px-4 dark:text-gray-300">Hi, {{ current_user.username }}</span>
           <a href="{{ url_for('logout') }}" class="interactive hover:underline">Logout</a>
@@ -78,12 +76,12 @@
     </div>
   </nav>
 
-  <main id="main-content" class="container mx-auto px-4">
+  <main id="main-content" class="max-w-3xl mx-auto px-4">
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Optionally add a simple footer -->
-  <footer class="text-center text-xs py-4 text-gray-400 dark:text-gray-600">
+  <!-- Footer -->
+  <footer class="text-center text-xs py-4 text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-800">
     &copy; 2025 SpeakLoudTTS. All rights reserved.
   </footer>
 

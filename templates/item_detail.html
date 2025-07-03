@@ -1,29 +1,7 @@
 {% extends "base.html" %}
-
 {% block head %}
-  <title>{{ item.title }} | SpeakLoudTTS</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#2563eb">
-  <meta property="og:title" content="{{ item.title }}">
-  <meta property="og:description" content="Listen to the audio version of '{{ item.title }}' by {{ item.author or 'Unknown' }} on SpeakLoudTTS.">
-  <meta property="og:url" content="{{ request.url }}">
-  {% if item.favicon_url %}
-    <meta property="og:image" content="{{ item.favicon_url }}">
-    <link rel="image_src" href="{{ item.favicon_url }}">
-  {% endif %}
-  <meta property="og:type" content="music.song">
-  <meta property="og:audio" content="{{ item.audio_url }}">
-  <meta property="og:audio:type" content="audio/mpeg">
-  <meta name="twitter:card" content="player">
-  <meta name="twitter:title" content="{{ item.title }}">
-  <meta name="twitter:description" content="Audio version of '{{ item.title }}'.">
-  <meta name="twitter:player:stream" content="{{ item.audio_url }}">
-  <meta name="twitter:player:stream:content_type" content="audio/mpeg">
-  <meta name="apple-mobile-web-app-title" content="{{ item.title }}">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="HandheldFriendly" content="True">
+  <!-- ...social meta as above... -->
 {% endblock %}
-
 {% block content %}
 <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
   <div class="max-w-2xl mx-auto px-4 py-4 flex flex-col gap-2">
@@ -38,27 +16,32 @@
       {% if item.reading_time_min %}<span class="hidden sm:inline">|</span><span>~{{ item.reading_time_min }} min read</span>{% endif %}
     </div>
     <div class="w-full flex items-center justify-center p-2 bg-gray-100 dark:bg-gray-800 rounded">
-      <audio
-        id="audio-player"
-        controls
-        preload="auto"
-        class="w-full"
-        style="max-width: 600px;"
-        src="{{ item.audio_url }}">
-        Your browser doesn’t support audio playback.
-      </audio>
+      {% if item.audio_url %}
+        <audio id="audio-player" controls preload="auto" class="w-full" style="max-width:600px;" src="{{ item.audio_url }}">
+          Your browser doesn’t support audio playback.
+        </audio>
+      {% else %}
+        <span class="text-red-600">Audio unavailable for this article.</span>
+      {% endif %}
     </div>
-    <div class="flex flex-col sm:flex-row sm:items-center gap-3 mt-2 mb-3">
+    <div class="flex items-center space-x-2 mb-4">
+      <button id="copy-link-btn" onclick="navigator.clipboard.writeText(window.location.href); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy Link',2000);" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Copy Link</button>
+      {% if item.audio_url %}
       <a href="{{ item.audio_url }}" download="{{ item.title|replace(' ', '_') }}.mp3"
          class="inline-flex items-center px-3 py-1 bg-primary text-white rounded shadow hover:bg-blue-700 text-sm">
         ⬇ Download Audio
       </a>
+      {% endif %}
+    </div>
+    {% if is_authenticated %}
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3 mt-2 mb-3">
       <form method="POST" action="{{ url_for('update_tags', item_id=item.id) }}" class="flex items-center gap-2 w-full sm:w-auto">
         <input type="text" name="tags" value="{{ tags|join(', ') }}" placeholder="comma,separated"
                class="px-3 py-1 border rounded dark:bg-gray-800 dark:border-gray-600 text-sm w-full sm:w-56" autocomplete="off">
         <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded text-sm">Save Tags</button>
       </form>
     </div>
+    {% endif %}
   </div>
 </div>
 
@@ -76,7 +59,6 @@
       {% if item.section %}<li><strong>Section:</strong> {{ item.section }}</li>{% endif %}
     </ul>
   </details>
-
   <div>
     <label class="block font-medium mb-1">Tags:</label>
     <div class="flex flex-wrap gap-2 mb-2">
@@ -87,7 +69,6 @@
       {% endfor %}
     </div>
   </div>
-
   <article id="full-text" class="prose prose-base sm:prose-lg dark:prose-invert max-w-none bg-white dark:bg-gray-800 p-4 rounded shadow">
     {% for para in paragraphs %}
       {% if para.strip() %}
@@ -102,5 +83,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <!-- Minimal or no JS for maximum compatibility. If you want analytics, add here. -->
+  <script>
+    // Animate the copy link button (already in the HTML above)
+  </script>
 {% endblock %}

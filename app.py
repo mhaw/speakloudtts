@@ -16,6 +16,8 @@ from google.auth.exceptions import DefaultCredentialsError
 from your_user_module import User
 from extractor import extract_article
 from tts import synthesize_long_text
+from flask import Response, request
+from rss import generate_feed  # make sure this import is correct!
 
 # --- Logging ---
 logging.basicConfig(
@@ -114,6 +116,96 @@ def logout():
 @app.route("/")
 def home():
     return render_template("index.html")
+
+# --- Admin Page: All Articles ---
+@app.route("/admin")
+@login_required
+def admin_dashboard():
+    if not hasattr(current_user, "is_admin") or not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("home"))
+
+    # Pagination params
+    page_size = 25
+    try:
+        page = int(request.args.get("page", 1))
+        if page < 1:
+            page = 1
+    except ValueError:
+        page = 1
+
+    # Firestore query
+    items_ref = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING)
+    all_docs = list(items_ref.stream())
+    total_count = len(all_docs)
+
+    # Manual pagination
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paged_docs = all_docs[start_idx:end_idx]
+    items = []
+
+    for doc in paged_docs:
+        d = doc.to_dict()
+        d["id"] = doc.id
+        dt = d.get("submitted_at")
+        d["submitted_at_fmt"] = dt.to_datetime().strftime("%Y-%m-%d %H:%M") if hasattr(dt, "to_datetime") else "—"
+        pd = d.get("publish_date")
+        d["publish_date_fmt"] = pd.strftime("%Y-%m-%d") if isinstance(pd, datetime) else "N/A"
+        d["storage_bytes"] = d.get("storage_bytes", "—")
+        items.append(d)
+
+    # Pagination logic
+    prev_page = page - 1 if page > 1 else None
+    next_page = page + 1 if end_idx < total_count else None
+
+    print("DEBUG: items returned to template:", len(items))
+    if items:
+        print("DEBUG: First item keys:", list(items[0].keys()))
+        print("DEBUG: First item sample:", items[0])
+
+    return render_template(
+        "admin.html",
+        items=items,
+        total_count=total_count,
+        page=page,
+        prev_page=prev_page,
+        next_page=next_page,
+        page_size=page_size,
+        error=None
+    )
+    
+# --- (Optional) API for Admin DataTable (for JS/AJAX tables) ---
+@app.route("/api/admin/items")
+@login_required
+def api_admin_items():
+    if not hasattr(current_user, "is_admin") or not current_user.is_admin:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        items = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(500)
+        result = []
+        for doc in items.stream():
+            d = doc.to_dict()
+            d["id"] = doc.id
+            dt = d.get("submitted_at")
+            if hasattr(dt, "to_datetime"):
+                d["submitted_at_fmt"] = dt.to_datetime().strftime("%Y-%m-%d %H:%M")
+            elif isinstance(dt, datetime):
+                d["submitted_at_fmt"] = dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                d["submitted_at_fmt"] = "—"
+            result.append(d)
+        # CHANGE IS HERE:
+        return jsonify({"items": result})
+    except Exception as e:
+        logger.error(f"Error in api_admin_items: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/feed.xml')
+def podcast_feed():
+    app_url_root = request.url_root
+    feed_xml = generate_feed(app_url_root)
+    return Response(feed_xml, mimetype='application/rss+xml')
 
 # --- Submit route ---
 @app.route("/submit", methods=["GET", "POST"])
@@ -237,7 +329,6 @@ def update_tags(item_id):
 
 # --- Item detail (render text as paragraphs, handle tags) ---
 @app.route("/item/<item_id>")
-@login_required
 def item_detail(item_id):
     doc = db.collection("items").document(item_id).get()
     if not doc.exists:
@@ -251,7 +342,16 @@ def item_detail(item_id):
     tags = item.get("tags", [])
     if isinstance(tags, str):
         tags = [t.strip() for t in tags.split(",") if t.strip()]
-    return render_template("item_detail.html", item=item, paragraphs=paragraphs, tags=tags)
+
+        
+    is_authenticated = current_user.is_authenticated if hasattr(current_user, "is_authenticated") else False
+    return render_template(
+        "item_detail.html",
+        item=item,
+        paragraphs=paragraphs,
+        tags=tags,
+        is_authenticated=is_authenticated
+)
 
 # --- Health check ---
 @app.route("/health")

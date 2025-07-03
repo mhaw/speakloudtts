@@ -1,4 +1,5 @@
 // static/js/submit.js
+
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('submit-form');
     const urlInput = document.getElementById('url-input');
@@ -6,6 +7,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const tagsInput = document.getElementById('tags-input');
     const submitBtn = document.getElementById('submit-btn');
     const statusDiv = document.getElementById('status');
+    const spinner = document.createElement('span');
+    spinner.className = "animate-spin ml-2 inline-block align-middle";
+    spinner.innerHTML = '⏳';
+
+    // Extra: focus on first field
+    if (urlInput) urlInput.focus();
+
+    // Extra: Instant URL validation (optional)
+    urlInput.addEventListener('input', () => {
+        try {
+            if (urlInput.value && !/^https?:\/\/.+\..+/.test(urlInput.value)) {
+                urlInput.classList.add('border-red-500');
+            } else {
+                urlInput.classList.remove('border-red-500');
+            }
+        } catch (e) {}
+    });
 
     if (!form) {
         console.error('Submit form not found.');
@@ -15,29 +33,31 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        // Extra: Validate URL format
         const url = urlInput.value.trim();
-        if (!url) {
-            statusDiv.textContent = 'Please enter an Article URL.';
+        if (!url || !/^https?:\/\/.+\..+/.test(url)) {
+            statusDiv.textContent = 'Please enter a valid Article URL.';
             statusDiv.className = 'text-red-500 min-h-[2em] text-center';
+            urlInput.classList.add('border-red-500');
+            urlInput.focus();
             return;
         }
 
-        submitBtn.disabled = true;
-        statusDiv.textContent = 'Submitting...';
-        statusDiv.className = 'text-blue-600 min-h-[2em] text-center';
+        // Extra: Disable all form fields during submission
+        [urlInput, voiceSelect, tagsInput, submitBtn].forEach(el => el && (el.disabled = true));
+        submitBtn.dataset.oldText = submitBtn.textContent;
+        submitBtn.textContent = 'Submitting...';
+        submitBtn.appendChild(spinner);
+
+        statusDiv.textContent = '';
+        statusDiv.className = 'min-h-[2em] text-center';
 
         try {
             const formData = new FormData(form);
 
-            // DEBUG: log the fields sent
-            for (let pair of formData.entries()) {
-                console.log(pair[0], pair[1]);
-            }
-
             const response = await fetch('/submit', {
                 method: 'POST',
                 body: formData
-                // DO NOT set Content-Type header!
             });
 
             if (response.redirected) {
@@ -45,18 +65,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || 'Unknown error');
+            let data, errorText;
+            try {
+                data = await response.json();
+            } catch (jsonErr) {
+                errorText = await response.text();
             }
-            statusDiv.textContent = data.message || 'Submission successful!';
+
+            if (!response.ok) {
+                throw new Error(
+                    (data && data.error) ||
+                    errorText ||
+                    `Server error (${response.status})`
+                );
+            }
+
+            statusDiv.textContent = (data && data.message) || 'Submission successful!';
             statusDiv.className = 'text-green-600 min-h-[2em] text-center';
+
+            // Extra: animate success
+            statusDiv.classList.add('animate-pulse');
+            setTimeout(() => statusDiv.classList.remove('animate-pulse'), 1500);
+
             form.reset();
+            urlInput.classList.remove('border-red-500');
         } catch (err) {
             statusDiv.textContent = `Error: ${err.message}`;
             statusDiv.className = 'text-red-500 min-h-[2em] text-center';
         } finally {
-            submitBtn.disabled = false;
+            // Restore form fields
+            [urlInput, voiceSelect, tagsInput, submitBtn].forEach(el => el && (el.disabled = false));
+            submitBtn.textContent = submitBtn.dataset.oldText || 'Convert to Audio';
         }
     });
 });
