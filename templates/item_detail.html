@@ -1,36 +1,56 @@
 {% extends "base.html" %}
 {% block head %}
-  <!-- ...social meta as above... -->
+  <!-- Add meta for sharing if you like -->
+  {{ super() }}
 {% endblock %}
 {% block content %}
-<div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
+<div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 shadow">
   <div class="max-w-2xl mx-auto px-4 py-4 flex flex-col gap-2">
-    <a href="{{ url_for('list_items') }}" class="text-sm text-gray-500 hover:text-primary mb-1">
+    <a href="{{ url_for('list_items') }}" class="text-sm text-gray-500 hover:text-blue-600 mb-1">
       ← Back to all articles
     </a>
-    <h1 class="text-2xl sm:text-3xl font-bold text-primary mb-1">{{ item.title }}</h1>
+    <h1 class="text-2xl sm:text-3xl font-bold text-primary mb-1 break-words">{{ item.title or "Untitled" }}</h1>
     <div class="flex flex-col sm:flex-row sm:items-center sm:gap-4 text-gray-600 dark:text-gray-400 text-sm mb-2">
       <span>By <strong>{{ item.author or "Unknown" }}</strong></span>
       {% if item.publish_date_fmt %}<span class="hidden sm:inline">|</span><span>{{ item.publish_date_fmt }}</span>{% endif %}
       {% if item.word_count %}<span class="hidden sm:inline">|</span><span>{{ item.word_count }} words</span>{% endif %}
       {% if item.reading_time_min %}<span class="hidden sm:inline">|</span><span>~{{ item.reading_time_min }} min read</span>{% endif %}
+      {% if item.status %}<span class="hidden sm:inline">|</span>
+        <span class="inline-flex items-center gap-1 {{ 'text-green-600' if item.status == 'complete' else 'text-yellow-600' if item.status == 'processing' else 'text-red-600' }}">
+          {{ item.status|capitalize }}
+        </span>
+      {% endif %}
     </div>
     <div class="w-full flex items-center justify-center p-2 bg-gray-100 dark:bg-gray-800 rounded">
       {% if item.audio_url %}
-        <audio id="audio-player" controls preload="auto" class="w-full" style="max-width:600px;" src="{{ item.audio_url }}">
+        <audio id="audio-player" controls preload="auto" class="w-full max-w-xl" src="{{ item.audio_url }}">
           Your browser doesn’t support audio playback.
         </audio>
+      {% elif item.status == 'processing' %}
+        <span class="text-yellow-600">Audio is still processing. Please check back later.</span>
       {% else %}
         <span class="text-red-600">Audio unavailable for this article.</span>
       {% endif %}
     </div>
     <div class="flex items-center space-x-2 mb-4">
-      <button id="copy-link-btn" onclick="navigator.clipboard.writeText(window.location.href); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy Link',2000);" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Copy Link</button>
+      <button id="copy-link-btn" type="button"
+        class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+        aria-label="Copy article link">
+        Copy Link
+      </button>
       {% if item.audio_url %}
       <a href="{{ item.audio_url }}" download="{{ item.title|replace(' ', '_') }}.mp3"
-         class="inline-flex items-center px-3 py-1 bg-primary text-white rounded shadow hover:bg-blue-700 text-sm">
+         class="inline-flex items-center px-3 py-1 bg-primary text-white rounded shadow hover:bg-blue-700 text-sm"
+         aria-label="Download audio">
         ⬇ Download Audio
       </a>
+      {% endif %}
+      {% if is_authenticated and item.status != 'complete' %}
+      <form method="POST" action="{{ url_for('reprocess_item', item_id=item.id) }}" style="display:inline;">
+        <button type="submit" class="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm">
+          Reprocess
+        </button>
+      </form>
       {% endif %}
     </div>
     {% if is_authenticated %}
@@ -57,6 +77,10 @@
       {% if item.domain %}<li><strong>Domain:</strong> {{ item.domain }}</li>{% endif %}
       {% if item.publisher %}<li><strong>Publisher:</strong> {{ item.publisher }}</li>{% endif %}
       {% if item.section %}<li><strong>Section:</strong> {{ item.section }}</li>{% endif %}
+      {% if item.storage_bytes %}<li><strong>Size:</strong> {{ (item.storage_bytes // 1024) }} KB</li>{% endif %}
+      {% if item.submitted_ip %}<li><strong>Submitted by IP:</strong> {{ item.submitted_ip }}</li>{% endif %}
+      {% if item.submitted_at_fmt %}<li><strong>Submitted at:</strong> {{ item.submitted_at_fmt }}</li>{% endif %}
+      <li><strong>Status:</strong> {{ item.status|capitalize or '—' }}</li>
     </ul>
   </details>
   <div>
@@ -84,6 +108,20 @@
 {% block scripts %}
   {{ super() }}
   <script>
-    // Animate the copy link button (already in the HTML above)
+    // Animate the copy link button
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('copy-link-btn');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(window.location.href);
+          btn.textContent = 'Copied!';
+          btn.classList.add('bg-green-600');
+          setTimeout(() => {
+            btn.textContent = 'Copy Link';
+            btn.classList.remove('bg-green-600');
+          }, 2000);
+        });
+      }
+    });
   </script>
 {% endblock %}

@@ -16,7 +16,7 @@ from google.auth.exceptions import DefaultCredentialsError
 from your_user_module import User
 from extractor import extract_article
 from tts import synthesize_long_text
-from flask import Response, request
+from flask import Response
 from rss import generate_feed  # make sure this import is correct!
 
 # --- Logging ---
@@ -153,16 +153,13 @@ def admin_dashboard():
         pd = d.get("publish_date")
         d["publish_date_fmt"] = pd.strftime("%Y-%m-%d") if isinstance(pd, datetime) else "N/A"
         d["storage_bytes"] = d.get("storage_bytes", "—")
+        # Show error/extract info for admin troubleshooting
+        d["error_message"] = d.get("error_message", None)
+        d["extract_status"] = d.get("extract_status", None)
         items.append(d)
 
-    # Pagination logic
     prev_page = page - 1 if page > 1 else None
     next_page = page + 1 if end_idx < total_count else None
-
-    print("DEBUG: items returned to template:", len(items))
-    if items:
-        print("DEBUG: First item keys:", list(items[0].keys()))
-        print("DEBUG: First item sample:", items[0])
 
     return render_template(
         "admin.html",
@@ -174,8 +171,72 @@ def admin_dashboard():
         page_size=page_size,
         error=None
     )
-    
-# --- (Optional) API for Admin DataTable (for JS/AJAX tables) ---
+
+# --- Admin Action: Retry Extraction/Processing ---
+@app.route("/admin/reprocess/<item_id>", methods=["POST"])
+@login_required
+def admin_reprocess_item(item_id):
+    if not hasattr(current_user, "is_admin") or not current_user.is_admin:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        doc_ref = db.collection("items").document(item_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return jsonify({"error": "Item not found"}), 404
+        d = doc.to_dict()
+        url = d.get("url")
+        voice = d.get("voice", DEFAULT_VOICE)
+        tags = d.get("tags", [])
+        logger.info(f"[ADMIN] Reprocessing item {item_id} (url: {url})")
+
+        doc_ref.update({"status": "processing", "error_message": None})
+
+        meta = extract_article(url)
+        text = meta.get("text", "")
+        doc_ref.update({
+            "title": meta.get("title", "Untitled"),
+            "author": meta.get("author", "Unknown"),
+            "text": text,
+            "text_preview": text[:200],
+            "word_count": len(text.split()),
+            "reading_time_min": max(1, len(text.split()) // 200),
+            "publish_date": meta.get("publish_date", None),
+            "favicon_url": meta.get("favicon_url", ""),
+            "publisher": meta.get("publisher", ""),
+            "section": meta.get("section", ""),
+            "domain": meta.get("domain", ""),
+            "extract_status": meta.get("extract_status", None),
+            "error_message": meta.get("error", None)
+        })
+
+        if not text:
+            raise ValueError("No article text extracted on retry.")
+
+        tts_result = synthesize_long_text(
+            meta.get("title"), meta.get("author"), text, item_id, voice
+        )
+        if tts_result.get("error"):
+            raise RuntimeError(tts_result["error"])
+
+        audio_uri = tts_result.get("uri")
+        doc_ref.update({
+            "status": "done",
+            "audio_url": audio_uri,
+            "processed_at": firestore.SERVER_TIMESTAMP,
+            "error_message": None
+        })
+
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"[ADMIN] Reprocess failed for item {item_id}: {e}", exc_info=True)
+        if 'doc_ref' in locals():
+            try:
+                doc_ref.update({"status": "error", "error_message": str(e)})
+            except Exception as update_err:
+                logger.error(f"[ADMIN] Error updating doc after reprocess failure: {update_err}")
+        return jsonify({"error": str(e)}), 500
+
+# --- API for Admin DataTable (JS/AJAX) ---
 @app.route("/api/admin/items")
 @login_required
 def api_admin_items():
@@ -194,8 +255,9 @@ def api_admin_items():
                 d["submitted_at_fmt"] = dt.strftime("%Y-%m-%d %H:%M")
             else:
                 d["submitted_at_fmt"] = "—"
+            d["error_message"] = d.get("error_message", None)
+            d["extract_status"] = d.get("extract_status", None)
             result.append(d)
-        # CHANGE IS HERE:
         return jsonify({"items": result})
     except Exception as e:
         logger.error(f"Error in api_admin_items: {e}", exc_info=True)
@@ -242,9 +304,6 @@ def submit_url():
 
         meta = extract_article(url)
         text = meta.get("text", "")
-        if not text:
-            raise ValueError("No article text extracted.")
-
         doc_ref.update({
             "title": meta.get("title", "Untitled"),
             "author": meta.get("author", "Unknown"),
@@ -257,7 +316,12 @@ def submit_url():
             "publisher": meta.get("publisher", ""),
             "section": meta.get("section", ""),
             "domain": meta.get("domain", ""),
+            "extract_status": meta.get("extract_status", None),
+            "error_message": meta.get("error", None)
         })
+
+        if not text:
+            raise ValueError("No article text extracted.")
 
         tts_result = synthesize_long_text(
             meta.get("title"), meta.get("author"), text, item_id, voice
@@ -270,7 +334,8 @@ def submit_url():
         doc_ref.update({
             "status": "done",
             "audio_url": audio_uri,
-            "processed_at": firestore.SERVER_TIMESTAMP
+            "processed_at": firestore.SERVER_TIMESTAMP,
+            "error_message": None
         })
 
         return redirect(url_for("list_items"))
@@ -306,6 +371,8 @@ def list_items():
                 d["submitted_at_fmt"] = submitted_at[:16]
             else:
                 d["submitted_at_fmt"] = "—"
+            d["error_message"] = d.get("error_message", None)
+            d["extract_status"] = d.get("extract_status", None)
             result.append(d)
         return render_template("items.html", items=result)
     except Exception as e:
@@ -342,8 +409,6 @@ def item_detail(item_id):
     tags = item.get("tags", [])
     if isinstance(tags, str):
         tags = [t.strip() for t in tags.split(",") if t.strip()]
-
-        
     is_authenticated = current_user.is_authenticated if hasattr(current_user, "is_authenticated") else False
     return render_template(
         "item_detail.html",
@@ -351,7 +416,7 @@ def item_detail(item_id):
         paragraphs=paragraphs,
         tags=tags,
         is_authenticated=is_authenticated
-)
+    )
 
 # --- Health check ---
 @app.route("/health")

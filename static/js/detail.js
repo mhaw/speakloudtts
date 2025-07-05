@@ -1,35 +1,39 @@
 // static/js/detail.js
+
 document.addEventListener('DOMContentLoaded', () => {
-    // ----- Plyr Player Setup -----
+    // ---------- Plyr Player Setup ----------
     const audioPlayerElement = document.getElementById('audio-player');
     let player = null;
 
-    // Plyr gracefully optional
     if (window.Plyr && audioPlayerElement) {
-        player = new Plyr(audioPlayerElement, {
-            controls: [
-                'play-large', 'play', 'progress', 'current-time',
-                'duration', 'mute', 'volume', 'settings', 'download'
-            ],
-            settings: ['speed'],
-            speed: {
-                selected: 1,
-                options: [0.8, 1, 1.1, 1.25, 1.5]
-            },
-            tooltips: { controls: true, seek: true }
-        });
-        window.speakLoudPlayer = player;
+        try {
+            player = new Plyr(audioPlayerElement, {
+                controls: [
+                    'play-large', 'play', 'progress', 'current-time',
+                    'duration', 'mute', 'volume', 'settings', 'download'
+                ],
+                settings: ['speed'],
+                speed: {
+                    selected: 1,
+                    options: [0.8, 1, 1.1, 1.25, 1.5]
+                },
+                tooltips: { controls: true, seek: true }
+            });
+            window.speakLoudPlayer = player;
+        } catch (err) {
+            console.warn("Failed to initialize Plyr:", err);
+        }
     }
 
-    // ----- Elements -----
-    const progressBarContainer = document.getElementById('audio-progress-container');
-    const progressBar = document.getElementById('audio-progress');
-    const paras = Array.from(document.querySelectorAll('#full-text .paragraph'));
+    // ---------- Elements ----------
+    const paras = Array.from(document.querySelectorAll('#full-text p'));
     const currentEl = document.getElementById('current-time');
     const totalEl = document.getElementById('total-time');
     const speedBtns = Array.from(document.querySelectorAll('.speed-btn'));
     const rewindBtn = document.getElementById('rewind-btn');
     const forwardBtn = document.getElementById('forward-btn');
+    const progressBarContainer = document.getElementById('audio-progress-container');
+    const progressBar = document.getElementById('audio-progress');
 
     // Tag Editor
     const editTagsBtn = document.getElementById('edit-tags-btn');
@@ -39,13 +43,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const tagsInput = document.getElementById('tags-input');
     const tagsDisplayDiv = document.getElementById('tags-display');
 
-    // ----- State -----
+    // ---------- State ----------
     let boundaries = [];
-    const storageKey = `speakloudtts-playback-time-${window.ITEM_ID}`;
-    const allowedPlaybackRates = [0.8, 1, 1.1, 1.25, 1.5];
     let currentParaIdx = -1;
+    const storageKey = `speakloudtts-playback-time-${window.ITEM_ID || ''}`;
+    const allowedPlaybackRates = [0.8, 1, 1.1, 1.25, 1.5];
 
-    // ----- Utility -----
+    // ---------- Utils ----------
     function formatTime(seconds) {
         if (isNaN(seconds) || seconds === Infinity) return '00:00';
         const m = Math.floor(seconds / 60);
@@ -53,17 +57,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${m}:${s}`;
     }
 
-    // ----- Player Logic -----
+    // ---------- Player Logic ----------
     if (player) {
         player.on('loadedmetadata', () => {
             const duration = player.duration;
-            totalEl.textContent = formatTime(duration);
+            if (totalEl) totalEl.textContent = formatTime(duration);
+
             // Restore last play position
             const savedTime = parseFloat(localStorage.getItem(storageKey));
             if (!isNaN(savedTime) && savedTime > 0 && savedTime < duration) {
                 player.currentTime = Math.min(savedTime, duration - 0.1);
             }
-            // Time boundaries for paragraph highlighting
+
+            // Boundaries for para highlighting
             const lengths = paras.map(p => p.textContent.length);
             const totalLength = lengths.reduce((sum, len) => sum + len, 0) || 1;
             let acc = 0;
@@ -76,11 +82,11 @@ document.addEventListener('DOMContentLoaded', () => {
         player.on('timeupdate', () => {
             const currentTime = player.currentTime;
             localStorage.setItem(storageKey, currentTime.toString());
-            currentEl.textContent = formatTime(currentTime);
+            if (currentEl) currentEl.textContent = formatTime(currentTime);
             if (progressBar && player.duration > 0) {
                 progressBar.style.width = `${(currentTime / player.duration) * 100}%`;
             }
-            // Highlight current paragraph
+            // Paragraph highlighting logic
             let newIdx = boundaries.findIndex(boundary => currentTime <= boundary);
             if (newIdx === -1 && currentTime > 0) newIdx = paras.length - 1;
             if (newIdx !== currentParaIdx) {
@@ -88,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     p.classList.toggle('bg-yellow-100', i === newIdx);
                     p.classList.toggle('dark:bg-yellow-800', i === newIdx);
                 });
-                // Only scroll if playing and on mobile or small screen
                 if (paras[newIdx] && player.playing && window.innerWidth <= 640) {
                     paras[newIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
@@ -96,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Seek with custom progress bar
+        // Custom progress bar seeking
         if (progressBarContainer) {
             progressBarContainer.addEventListener('click', e => {
                 if (player.duration > 0) {
@@ -107,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Rewind & Forward
+        // Rewind/Forward
         if (rewindBtn) rewindBtn.addEventListener('click', () => player.currentTime = Math.max(0, player.currentTime - 15));
         if (forwardBtn) forwardBtn.addEventListener('click', () => player.currentTime = Math.min(player.duration || 0, player.currentTime + 30));
 
@@ -138,9 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => setPlaybackRate(savedRate), 100);
     }
 
-    // ----- Tag Editor Logic -----
+    // ---------- Tag Editor ----------
     if (editTagsBtn && tagsEditorDiv && saveTagsBtn && cancelTagsBtn && tagsInput && tagsDisplayDiv) {
-        // Accessibility: focus trap
         function trapFocus(e) {
             if (tagsEditorDiv.classList.contains('hidden')) return;
             const focusable = [tagsInput, saveTagsBtn, cancelTagsBtn];
@@ -194,9 +198,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ----- Keyboard Shortcuts -----
+    // ---------- Keyboard Shortcuts ----------
     document.addEventListener('keydown', (e) => {
-        // Ignore when editing tags
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
         if (!player) return;
         switch (e.key) {
@@ -230,6 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ----- Debug -----
-    console.log('SpeakLoudTTS detail page script initialized.');
+    // ---------- Debug/Log ----------
+    console.info('[SpeakLoudTTS] detail.js loaded');
+    if (!player) console.warn('No audio player found or Plyr not loaded.');
 });
