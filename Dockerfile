@@ -55,6 +55,9 @@ COPY --from=builder /app/static/css/output.css /app/static/css/output.css
 # Copy app code
 COPY . .
 
+COPY credentials.json /app/credentials.json
+
+
 # ─── Generate Build ID ──────────────────────────────────────────
 RUN BUILD_ID="$(date +%m%d%Y)_$(shuf -n1 -e wolf_blitzer jack_handey alec_baldwin bill_murray taylor_swift tony_stark rihanna lizzo the_bear morrissey joan_didion sue_bird)" && \
     echo "$BUILD_ID" > BUILD_INFO && \
@@ -62,6 +65,7 @@ RUN BUILD_ID="$(date +%m%d%Y)_$(shuf -n1 -e wolf_blitzer jack_handey alec_baldwi
 
 ENV PORT=8080 \
     PYTHONUNBUFFERED=1 \
-    BUILD_ID_FILE=/app/BUILD_INFO
+    BUILD_ID_FILE=/app/BUILD_INFO \
+    GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "main:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "main:app", "--timeout", "300"]

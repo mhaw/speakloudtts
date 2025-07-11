@@ -2,6 +2,7 @@ import logging
 import json
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+import time
 
 from flask import (
     Flask, request, jsonify, render_template, redirect, url_for, flash, Response, Blueprint, current_app
@@ -24,6 +25,7 @@ from rss import generate_feed
 # --- Blueprints ---
 main_bp = Blueprint('main', __name__)
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+tasks_bp = Blueprint('tasks', __name__, url_prefix='/tasks')
 
 # --- Login Setup ---
 login_manager = LoginManager()
@@ -422,11 +424,10 @@ def failed_articles():
         flash("Could not fetch failed articles.", "error")
         return redirect(url_for("admin.dashboard"))
 
-
-
 # --- Task Handler ---
-@main_bp.route("/task-handler", methods=["POST"])
+@tasks_bp.route("/process-tts", methods=["POST"])
 def task_handler():
+    start = time.time()
     data = request.get_json()
     if not data or not (item_id := data.get("item_id")):
         return api_error("item_id is required", 400)
@@ -434,20 +435,22 @@ def task_handler():
     doc_ref = db.collection("items").document(item_id)
     doc = doc_ref.get()
     if not doc.exists:
-        # Acknowledge the task by returning 200 even if item is not found,
-        # to prevent Cloud Tasks from retrying a non-existent item.
         logging.warning(f"Task handler received non-existent item_id: {item_id}. Task will be acknowledged.")
         return api_success(message=f"Item {item_id} not found, task acknowledged.", code=200)
 
     item = doc.to_dict()
     try:
+        logging.info(f"Started processing item {item_id}.")
         doc_ref.update({"status": "processing"})
         process_article_submission(doc_ref, item.get("url"), item.get("voice", current_app.config["DEFAULT_VOICE"]))
+        elapsed = time.time() - start
+        logging.info(f"Successfully processed item {item_id} in {elapsed:.2f} seconds.")
         return api_success(message=f"Successfully processed item {item_id}.")
     except Exception as e:
         logging.error(f"Task handler failed for item {item_id}: {e}", exc_info=True)
         doc_ref.update({"status": "error", "error_message": str(e)})
-        # Return 500 to signal Cloud Tasks to retry the task.
+        elapsed = time.time() - start
+        logging.info(f"Processing failed for item {item_id} after {elapsed:.2f} seconds.")
         return api_error(str(e), 500)
 
 def create_app():
@@ -470,5 +473,6 @@ def create_app():
     # --- Register Blueprints ---
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(tasks_bp)
 
     return app
