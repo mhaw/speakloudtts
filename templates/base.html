@@ -1,76 +1,116 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
-  <meta charset="utf-8">
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Convert articles into high-quality audio with SpeakLoudTTS.">
-  <title>{% block title %}SpeakLoudTTS{% endblock %} | SpeakLoudTTS</title>
+    <meta charset="utf-8">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="Convert articles into high-quality audio with SpeakLoudTTS.">
+    <title>SpeakLoud - {% block title %}Home{% endblock %}</title>
 
-  <!-- Google Font: Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <!-- Local Tailwind CSS -->
-  <link href="{{ url_for('static', filename='css/output.css') }}" rel="stylesheet">
+    <!-- Local Tailwind CSS -->
+    <link href="{{ url_for('static', filename='css/output.css') }}" rel="stylesheet">
 
-  <style>
-    /* Custom base styles can go here if needed */
-  </style>
+    <style>
+        /* Use Inter as the default font */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
 
-  {% block head %}{% endblock %}
+    {% block head %}{% endblock %}
 </head>
-<body class="min-h-screen bg-base-100 text-base-content">
+<body class="bg-base-200 min-h-screen flex flex-col">
 
-  <!-- Skip to main content for accessibility -->
-  <a href="#main-content" class="sr-only focus:not-sr-only absolute left-2 top-2 z-50 bg-primary text-primary-content px-2 py-1 rounded">Skip to main content</a>
+    <!-- Skip to main content for accessibility -->
+    <a href="#main-content" class="sr-only focus:not-sr-only absolute left-2 top-2 z-50 bg-primary text-primary-content px-3 py-1 rounded-md shadow-lg">Skip to main content</a>
 
-  <!-- Navbar -->
-  <div class="navbar bg-base-200 shadow-md mb-8">
-    <div class="container mx-auto">
-      <div class="flex-1">
-        <a href="/" class="btn btn-ghost text-xl">
-          <span role="img" aria-label="mic">🎤</span>
-          SpeakLoudTTS
-        </a>
-      </div>
-      <div class="flex-none">
-        <ul class="menu menu-horizontal px-1">
-          <li><a href="/submit" class="{% if request.path=='/submit' %}active{% endif %}">Submit</a></li>
-          <li><a href="/items" class="{% if request.path.startswith('/items') %}active{% endif %}">Articles</a></li>
-          <li><a href="/feed.xml">📰 Feed</a></li>
-          <li><a href="/failed-articles" class="{% if request.path=='/failed-articles' %}active{% endif %}">⚠️ Failed</a></li>
-          <li><a href="/admin" class="{% if request.path.startswith('/admin') %}active{% endif %}">🔧 Admin</a></li>
-          {% if current_user.is_authenticated %}
-            <li>
-              <details>
-                <summary>Hi, {{ current_user.username }}</summary>
-                <ul class="p-2 bg-base-100 rounded-t-none">
-                  <li><a href="{{ url_for('logout') }}">Logout</a></li>
-                </ul>
-              </details>
-            </li>
-          {% else %}
-            <li><a href="{{ url_for('login') }}">Login</a></li>
-          {% endif %}
-        </ul>
-      </div>
-    </div>
-  </div>
+    <!-- Responsive Navbar -->
+    <header class="bg-base-100 shadow-sm sticky top-0 z-30">
+        <div class="navbar container mx-auto px-4">
+            <div class="navbar-start">
+                <a href="/" class="btn btn-ghost text-xl font-bold">
+                    <span role="img" aria-label="mic">🎤</span>
+                    SpeakLoud
+                </a>
+            </div>
+            <div class="navbar-end">
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex">
+                    <ul class="menu menu-horizontal px-1 space-x-1">
+                        <li><a href="/submit" class="btn btn-ghost {% if request.path=='/submit' %}btn-active{% endif %}">Submit</a></li>
+                        <li><a href="/items" class="btn btn-ghost {% if request.path.startswith('/items') %}btn-active{% endif %}">Articles</a></li>
+                        <li><a href="/feed.xml" class="btn btn-ghost">Feed</a></li>
+                        {% if current_user.is_authenticated and current_user.is_admin %}
+                            <li><a href="/admin" class="btn btn-ghost {% if request.path.startswith('/admin') %}btn-active{% endif %}">Admin</a></li>
+                        {% endif %}
+                        {% if current_user.is_authenticated %}
+                            <li class="dropdown dropdown-end">
+                                <label tabindex="0" class="btn btn-ghost">
+                                    Hi, {{ current_user.username }}
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                                </label>
+                                <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 mt-4">
+                                    <li><a href="{{ url_for('main.logout') }}">Logout</a></li>
+                                </ul>
+                            </li>
+                        {% else %}
+                            <li><a href="{{ url_for('main.login') }}" class="btn btn-ghost">Login</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <!-- Mobile Menu (Hamburger) -->
+                <div class="dropdown dropdown-end md:hidden">
+                    <label tabindex="0" class="btn btn-ghost">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                    </label>
+                    <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 mt-4">
+                        <li><a href="/submit">Submit</a></li>
+                        <li><a href="/items">Articles</a></li>
+                        <li><a href="/feed.xml">Feed</a></li>
+                        {% if current_user.is_authenticated and current_user.is_admin %}
+                            <li><a href="/admin">Admin</a></li>
+                        {% endif %}
+                        <div class="divider my-1"></div>
+                        {% if current_user.is_authenticated %}
+                            <li><a href="{{ url_for('main.logout') }}">Logout ({{ current_user.username }})</a></li>
+                        {% else %}
+                            <li><a href="{{ url_for('main.login') }}">Login</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </header>
 
-  <main id="main-content" class="container mx-auto px-4">
-    {% block content %}{% endblock %}
-  </main>
+    <main id="main-content" class="container mx-auto px-4 py-8 flex-grow">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-8 space-y-2">
+                {% for category, message in messages %}
+                    <div role="alert" class="alert alert-{{ 'success' if category == 'success' else 'error' }} shadow-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
 
-  <!-- Footer -->
-  <footer class="footer footer-center p-4 bg-base-300 text-base-content mt-12">
-    <aside>
-      <p>&copy; 2025 SpeakLoudTTS. All rights reserved.</p>
-    </aside>
-  </footer>
+    <!-- Footer -->
+    <footer class="footer footer-center p-4 bg-base-300 text-base-content mt-auto">
+        <aside>
+            <p>&copy; 2025 SpeakLoudTTS. All rights reserved.</p>
+        </aside>
+    </footer>
 
-  {% block scripts %}{% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
 </html>

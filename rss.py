@@ -1,10 +1,23 @@
-# rss.py
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from feedgen.feed import FeedGenerator
 from dateutil import parser as date_parser
 
 logger = logging.getLogger(__name__)
+
+def _generate_signed_url(blob, expiration_minutes=60):
+    """Generates a v4 signed URL for a blob."""
+    try:
+        # URL is valid for specified minutes
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(minutes=expiration_minutes),
+            method="GET",
+        )
+        return signed_url
+    except Exception as e:
+        logger.error(f"RSS: Error generating signed URL for blob {blob.name}: {e}", exc_info=True)
+        return None
 
 def generate_feed(db_client, storage_client, app_config: dict) -> str:
     """
@@ -45,17 +58,27 @@ def generate_feed(db_client, storage_client, app_config: dict) -> str:
 
     # Fetch 'done' items from Firestore, ordered by publish_date
     logger.info("RSS: Fetching 'done' items from Firestore for feed.")
-    docs_query = db_client.collection("items") \
-        .where("status", "==", "done") \
-        .where("audio_url", "!=", None) \
-        .order_by("publish_date", direction="DESCENDING") \
-        .limit(100)
+    try:
+        docs_query = db_client.collection("items") \
+            .where("status", "==", "done") \
+            .where("gcs_path", "!=", None) \
+            .order_by("publish_date", direction="DESCENDING") \
+            .limit(100)
+        docs = list(docs_query.stream())
+    except Exception as e:
+        logger.warning(f"RSS: Query with 'publish_date' failed: {e}. Falling back to 'submitted_at'.")
+        docs_query = db_client.collection("items") \
+            .where("status", "==", "done") \
+            .where("gcs_path", "!=", None) \
+            .order_by("submitted_at", direction="DESCENDING") \
+            .limit(100)
+        docs = list(docs_query.stream())
 
     items_for_feed = []
     raw_items_count = 0
     parse_errors_count = 0
 
-    for doc in docs_query.stream():
+    for doc in docs:
         raw_items_count += 1
         data = doc.to_dict()
         item_id = data.get("id", f"unknown_item_{raw_items_count}")
@@ -100,6 +123,7 @@ def generate_feed(db_client, storage_client, app_config: dict) -> str:
 
     for item_data in items_for_feed:
         item_id = item_data.get("id", "unknown")
+        gcs_path = item_data.get("gcs_path")
         logger.debug(f"RSS: Adding item '{item_id}' (Title: '{item_data.get('title')}') to feed.")
         fe = fg.add_entry()
         fe.id(f"{feed_link}items/{item_id}")
@@ -114,28 +138,23 @@ def generate_feed(db_client, storage_client, app_config: dict) -> str:
         fe.pubDate(item_data["publish_datetime_utc"])
         if item_data.get("author"): fe.author(name=item_data.get("author"))
 
-        audio_url = item_data.get("audio_url")
-        if audio_url:
-            length_bytes = "0"
-            # PERFORMANCE: Prioritize reading size from Firestore field to avoid GCS call
-            if "audio_size_bytes" in item_data:
-                length_bytes = str(item_data["audio_size_bytes"])
-                logger.debug(f"RSS: Found pre-saved blob size {length_bytes} bytes for item '{item_id}'.")
-            else:
-                # Fallback for older items: get size from GCS and log a warning
-                gcs_path = item_data.get("gcs_path", f"{item_id}.mp3")
-                blob = bucket.get_blob(gcs_path)
-                if blob and blob.size is not None:
-                    length_bytes = str(blob.size)
-                    logger.warning(f"RSS: Fetched blob size {length_bytes} bytes via a live GCS call for item '{item_id}'. "
-                                   f"Consider backfilling the 'audio_size_bytes' field in Firestore.")
+        if gcs_path:
+            blob = bucket.get_blob(gcs_path)
+            if blob:
+                # Generate a signed URL, valid for a long time for RSS readers
+                audio_url = _generate_signed_url(blob, expiration_minutes=60*24*7) # 7 days
+                length_bytes = str(blob.size) if blob.size is not None else "0"
+                
+                if audio_url:
+                    fe.enclosure(url=audio_url, length=length_bytes, type="audio/mpeg")
                 else:
-                    logger.error(f"RSS: Could not get blob or size for item '{item_id}' (gs://{bucket_name}/{gcs_path}). Using length 0.")
-            
-            fe.enclosure(url=audio_url, length=length_bytes, type="audio/mpeg")
+                    logger.error(f"RSS: Failed to generate signed URL for item '{item_id}' (gs://{bucket_name}/{gcs_path}).")
+            else:
+                logger.error(f"RSS: Could not get blob for item '{item_id}' (gs://{bucket_name}/{gcs_path}). Skipping enclosure.")
         else:
-            logger.warning(f"RSS: Item '{item_id}' is 'done' but has no audio_url. Skipping enclosure.")
+            logger.warning(f"RSS: Item '{item_id}' is 'done' but has no gcs_path. Skipping enclosure.")
 
     rss_xml_string = fg.rss_str(pretty=True)
     logger.info(f"RSS feed generated successfully. Final XML length: {len(rss_xml_string)} bytes.")
     return rss_xml_string
+

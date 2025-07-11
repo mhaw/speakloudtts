@@ -30,3 +30,7 @@ fix_errors.diff
 # Node / Frontend
 node_modules/
 /static/css/output.css
+
+# Gemini specific
+.env
+GEMINI.md

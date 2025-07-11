@@ -1,132 +1,45 @@
 import logging
-import os
-import sys
-from datetime import datetime
+import json
+from datetime import datetime, timedelta, timezone
+from functools import wraps
 
 from flask import (
-    Flask, request, jsonify, render_template, redirect, url_for, flash
+    Flask, request, jsonify, render_template, redirect, url_for, flash, Response, Blueprint, current_app
 )
 from flask_login import (
     LoginManager, login_user, logout_user, login_required, current_user
 )
 from flask_talisman import Talisman
 from flask_caching import Cache
-
-from google.cloud import firestore, storage, tasks_v2
-from google.auth.exceptions import DefaultCredentialsError
 from google.api_core.exceptions import FailedPrecondition
+from google.cloud import firestore
 
+# --- Local Imports ---
+from config import config
+from gcp import db, storage_client, bucket, create_processing_task
 from your_user_module import User
-from extractor import extract_article
-from tts import synthesize_long_text
-from flask import Response
-from rss import generate_feed  # make sure this import is correct!
+from processing import process_article_submission
+from rss import generate_feed
 
-# --- Logging ---
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s [%(levelname)s] [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger(__name__)
+# --- Blueprints ---
+main_bp = Blueprint('main', __name__)
+admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
-# --- Flask Setup ---
-app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "your_default_secret_key_here")
-
-# --- Security & Caching ---
-csp = {
-    'default-src': "'self'",
-    'style-src': [
-        "'self'",
-        'https://fonts.googleapis.com',
-        'https://cdn.jsdelivr.net' # Required for DaisyUI from CDN if not local
-    ],
-    'font-src': [
-        "'self'",
-        'https://fonts.gstatic.com'
-    ],
-    'script-src': [
-        "'self'",
-        'https://cdn.tailwindcss.com' # Required for Tailwind JIT from CDN
-    ]
-}
-if os.getenv("FLASK_ENV") != "development":
-    talisman = Talisman(app, content_security_policy=csp)
-else:
-    app.config["TALISMAN_ENABLED"] = False
-    talisman = Talisman(app, content_security_policy=None)
-
-cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
-
-# --- Login ---
+# --- Login Setup ---
 login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = "login"
+login_manager.login_view = "main.login"
 login_manager.login_message_category = "error"
 
-# --- Constants ---
-GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "speakloudtts-audio-files")
-ALLOWED_VOICES = [
-    "en-US-Standard-C", "en-US-Standard-D", "en-GB-Standard-A",
-    "en-AU-Standard-B", "en-US-Wavenet-D", "en-US-Wavenet-F",
-]
-DEFAULT_VOICE = ALLOWED_VOICES[0]
-
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-GCP_LOCATION_ID = os.getenv("GCP_LOCATION_ID")
-TTS_TASK_QUEUE_ID = os.getenv("TTS_TASK_QUEUE_ID")
-TTS_TASK_HANDLER_URL = os.getenv("TTS_TASK_HANDLER_URL")
-TTS_TASK_SERVICE_ACCOUNT_EMAIL = os.getenv("TTS_TASK_SERVICE_ACCOUNT_EMAIL")
-
-def get_build_id():
-    try:
-        with open("/app/BUILD_INFO") as f:
-            return f.read().strip()
-    except Exception:
-        return "unknown"
-
-logging.info(f"SpeakLoudTTS Starting (build: {get_build_id()})")
-
-@app.context_processor
-def inject_build_id():
-    return {"build_id": get_build_id()}
-
-# --- GCP Setup ---
-try:
-    db = firestore.Client()
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(GCS_BUCKET_NAME)
-    tasks_client = (
-        tasks_v2.CloudTasksClient()
-        if GCP_PROJECT_ID and GCP_LOCATION_ID and TTS_TASK_QUEUE_ID
-        else None
-    )
-    if not tasks_client:
-        logger.warning("Cloud Tasks client not initialized. Running in inline processing mode.")
-except DefaultCredentialsError as e:
-    logger.error(f"GCP credentials error: {e}")
-    db = storage_client = bucket = tasks_client = None
-except Exception as e:
-    logger.error(f"Failed to initialize Google Cloud clients: {e}", exc_info=True)
-    db = storage_client = bucket = tasks_client = None
-
-# --- Login loader ---
 @login_manager.user_loader
 def load_user(user_id):
-    logger.debug(f"Loading user: {user_id}")
     return User.get(user_id)
 
 # --- Helpers & Decorators ---
 def _doc_to_dict(doc):
-    """Converts a Firestore doc to a dict, adding id and formatted dates."""
     if not doc.exists:
         return None
     d = doc.to_dict()
     d["id"] = doc.id
-    
-    # Format submitted_at
     submitted_at = d.get("submitted_at")
     if hasattr(submitted_at, "to_datetime"):
         d["submitted_at_fmt"] = submitted_at.to_datetime().strftime("%Y-%m-%d %H:%M")
@@ -134,174 +47,195 @@ def _doc_to_dict(doc):
         d["submitted_at_fmt"] = submitted_at.strftime("%Y-%m-%d %H:%M")
     else:
         d["submitted_at_fmt"] = "—"
-        
-    # Format publish_date
     publish_date = d.get("publish_date")
     if isinstance(publish_date, datetime):
         d["publish_date_fmt"] = publish_date.strftime("%Y-%m-%d")
     else:
         d["publish_date_fmt"] = "N/A"
-        
     return d
 
-from functools import wraps
+def api_success(data=None, message="", code=200):
+    response = {"success": True}
+    if data is not None:
+        response["data"] = data
+    if message:
+        response["message"] = message
+    return jsonify(response), code
+
+def api_error(message, code=400):
+    logging.error(f"API Error ({code}): {message}")
+    return jsonify({"success": False, "error": {"message": message}}), code
+
+def _generate_signed_url(blob_name):
+    if not bucket or not blob_name:
+        return None
+    try:
+        blob = bucket.blob(blob_name)
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(minutes=60),
+            method="GET"
+        )
+    except Exception as e:
+        logging.error(f"Error generating signed URL for {blob_name}: {e}", exc_info=True)
+        return None
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or not getattr(current_user, "is_admin", False):
-            if request.path.startswith('/api/') or request.is_json:
-                 return jsonify({"error": "Admin access required."}), 403
+            if request.path.startswith('/admin/'):
+                return api_error("Admin access required.", 403)
             flash("Admin access required.", "error")
-            return redirect(url_for("home"))
+            return redirect(url_for("main.home"))
         return f(*args, **kwargs)
     return decorated_function
 
-
-def _api_error(message, code=400):
-    """Returns a standardized JSON error response."""
-    logger.error(f"API Error ({code}): {message}")
-    return jsonify({"success": False, "error": message}), code
-
-
-# --- Task Handler ---
-@app.route("/task-handler", methods=["POST"])
-def task_handler():
-    """
-    This endpoint is called by Cloud Tasks to process an article.
-    It's protected by OIDC authentication from Cloud Tasks.
-    """
-    if db is None:
-        return _api_error("Database not initialized", 500)
-
-    try:
-        # Get item_id from request body
-        data = request.get_json()
-        item_id = data.get("item_id")
-        if not item_id:
-            return _api_error("item_id is required in task payload", 400)
-
-        logger.info(f"[Task Handler] Received task for item_id: {item_id}")
-
-        # Fetch the document
+def get_item_or_abort(f):
+    @wraps(f)
+    def decorated_function(item_id, *args, **kwargs):
         doc_ref = db.collection("items").document(item_id)
         doc = doc_ref.get()
         if not doc.exists:
-            return _api_error(f"Item with id {item_id} not found.", 404)
-
-        item = doc.to_dict()
-        url = item.get("url")
-        voice = item.get("voice", DEFAULT_VOICE)
-
-        # Mark as processing
-        doc_ref.update({"status": "processing"})
-
-        # Process the article
-        _process_article_submission(doc_ref, url, voice)
-
-        logger.info(f"[Task Handler] Successfully processed item_id: {item_id}")
-        return jsonify({"success": True}), 200
-
-    except Exception as e:
-        error_message = f"[Task Handler] Processing failed for item_id {item_id}: {e}"
-        logger.error(error_message, exc_info=True)
+            if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+                return api_error("Item not found", 404)
+            return render_template("404.html"), 404
         
-        # Try to update the doc with the error, but handle failure gracefully
-        if 'item_id' in locals() and item_id:
-            try:
-                db.collection("items").document(item_id).update({
-                    "status": "error",
-                    "error_message": str(e)
-                })
-            except Exception as update_err:
-                logger.error(f"Failed to update error status for item_id {item_id}: {update_err}")
-        
-        # Return a 500 to signal Cloud Tasks to potentially retry
-        return _api_error(str(e), 500)
+        item_user_id = doc.to_dict().get("user_id")
+        is_admin = getattr(current_user, "is_admin", False)
+        if not is_admin and item_user_id != current_user.id:
+             if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+                return api_error("Forbidden", 403)
+             return render_template("403.html"), 403
 
+        kwargs['doc_ref'] = doc_ref
+        kwargs['doc'] = doc
+        return f(item_id, *args, **kwargs)
+    return decorated_function
 
-def _process_article_submission(doc_ref, url, voice):
-    """
-    Extracts article, synthesizes audio, and updates Firestore doc.
-    Raises exceptions on failure.
-    """
-    item_id = doc_ref.id
-    logger.info(f"Processing article for item_id: {item_id}, url: {url}")
+# --- Main Routes ---
+@main_bp.route("/")
+def home():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.submit_url"))
+    return render_template("index.html")
 
-    # 1. Extract article content
-    meta = extract_article(url)
-    text = meta.get("text", "")
-    
-    update_data = {
-        "title": meta.get("title", "Untitled"),
-        "author": meta.get("author", "Unknown"),
-        "text": text,
-        "text_preview": text[:200],
-        "word_count": len(text.split()),
-        "reading_time_min": max(1, len(text.split()) // 200),
-        "publish_date": meta.get("publish_date", None),
-        "favicon_url": meta.get("favicon_url", ""),
-        "publisher": meta.get("publisher", ""),
-        "section": meta.get("section", ""),
-        "domain": meta.get("domain", ""),
-        "extract_status": meta.get("extract_status", None),
-        "error_message": meta.get("error", None)
-    }
-    doc_ref.update(update_data)
-
-    if not text or meta.get("error"):
-        raise ValueError(f"Article extraction failed: {meta.get('error', 'No text found.')}")
-
-    # 2. Synthesize audio
-    tts_result = synthesize_long_text(
-        meta.get("title"), meta.get("author"), text, item_id, voice
-    )
-    if tts_result.get("error"):
-        raise RuntimeError(f"TTS synthesis failed: {tts_result['error']}")
-
-    # 3. Finalize document
-    audio_uri = tts_result.get("uri")
-    doc_ref.update({
-        "status": "done",
-        "audio_url": audio_uri,
-        "processed_at": firestore.SERVER_TIMESTAMP,
-        "error_message": None  # Clear previous errors
-    })
-    logger.info(f"Successfully processed item {item_id}")
-
-
-# --- Auth routes ---
-@app.route("/login", methods=["GET", "POST"])
+@main_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("submit_url"))
+        return redirect(url_for("main.submit_url"))
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         user = User.authenticate(username, password)
         if user:
             login_user(user)
-            return redirect(request.args.get("next") or url_for("submit_url"))
+            logging.info(f"User {user.id} logged in successfully.")
+            flash("Login successful.", "success")
+            return redirect(request.args.get("next") or url_for("main.submit_url"))
         else:
-            logger.warning(f"Failed login attempt for user: {username}")
+            logging.warning(f"Failed login attempt for username: {username}")
             flash("Invalid login.", "error")
     return render_template("login.html")
 
-@app.route("/logout")
+@main_bp.route("/logout")
 @login_required
 def logout():
+    logging.info(f"User {current_user.id} logged out.")
     logout_user()
-    return redirect(url_for("login"))
+    flash("You have been successfully logged out.", "success")
+    return redirect(url_for("main.home"))
 
-@app.route("/")
-def home():
-    return render_template("index.html")
+@main_bp.route("/submit", methods=["GET", "POST"])
+@login_required
+def submit_url():
+    if request.method == "GET":
+        return render_template("submit.html", voices=current_app.config["ALLOWED_VOICES"], default_voice=current_app.config["DEFAULT_VOICE"])
 
-# --- Admin Page: All Articles ---
-@app.route("/admin")
+    # POST request handling
+    data = request.get_json()
+    if not data:
+        return api_error("Invalid JSON payload.", 400)
+        
+    url = data.get("url", "").strip()
+    if not url:
+        return api_error("URL is required.")
+    
+    voice = data.get("voice", current_app.config["DEFAULT_VOICE"])
+    tags = [t.strip() for t in data.get("tags", "").split(",") if t.strip()]
+    
+    doc_ref = db.collection("items").document()
+    item_id = doc_ref.id
+    
+    try:
+        doc_ref.set({
+            "id": item_id, "user_id": current_user.id, "url": url,
+            "title": "Pending Extraction...", "status": "queued", "voice": voice,
+            "tags": tags, "submitted_at": datetime.now(timezone.utc),
+            "submitted_ip": request.remote_addr
+        })
+        
+        logging.info(f"New article submitted by {current_user.id}: {url}")
+
+        if not create_processing_task(item_id):
+            logging.warning(f"Task creation failed for {item_id}. Falling back to synchronous processing.")
+            process_article_submission(doc_ref, url, voice)
+            
+        return api_success(
+            data={"redirect": url_for("main.list_items")},
+            message="Your article has been successfully submitted!"
+        )
+    except Exception as e:
+        logging.error(f"Error in submit_url: {e}", exc_info=True)
+        doc_ref.update({"status": "error", "error_message": str(e)})
+        return api_error(str(e), 500)
+
+@main_bp.route("/items")
+@login_required
+def list_items():
+    items_ref = db.collection("items").where("user_id", "==", current_user.id).order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(50)
+    result = [_doc_to_dict(doc) for doc in items_ref.stream()]
+    return render_template("items.html", items=result)
+
+@main_bp.route("/item/<item_id>")
+@login_required
+@get_item_or_abort
+def item_detail(item_id, doc_ref, doc):
+    item = doc.to_dict()
+    item['id'] = item_id
+    if gcs_path := item.get("gcs_path"):
+        item["audio_url"] = _generate_signed_url(gcs_path)
+    
+    full_text = item.get('text', '')
+    paragraphs = [p.strip() for p in full_text.split('\n\n') if p.strip()]
+    return render_template("item_detail.html", item=item, paragraphs=paragraphs)
+
+@main_bp.route("/feed.xml")
+@login_required
+def podcast_feed():
+    app_config = {"APP_URL_ROOT": request.url_root, "GCS_BUCKET_NAME": current_app.config["GCS_BUCKET_NAME"]}
+    feed_xml = generate_feed(db, storage_client, app_config)
+    return Response(feed_xml, mimetype='application/rss+xml')
+
+@main_bp.route("/item/<item_id>/tags", methods=["POST"])
+@login_required
+@get_item_or_abort
+def update_tags(item_id, doc_ref, doc):
+    try:
+        tags_str = request.form.get("tags", "")
+        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+        doc_ref.update({"tags": tags})
+        flash("Tags updated.", "success")
+    except Exception as e:
+        logging.error(f"Error updating tags for item {item_id}: {e}", exc_info=True)
+        flash("Failed to update tags.", "error")
+    return redirect(url_for("main.item_detail", item_id=item_id))
+
+# --- Admin Routes ---
+@admin_bp.route("/")
 @login_required
 @admin_required
-def admin_dashboard():
+def dashboard():
     page_size = 25
     try:
         page = int(request.args.get("page", 1))
@@ -309,241 +243,169 @@ def admin_dashboard():
     except ValueError:
         page = 1
 
+    items = []
+    next_page = None
     try:
-        # Base query
-        query = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING)
-
-        # Get total count efficiently
-        aggregation_query = query.count()
-        count_result = aggregation_query.get()
-        total_count = count_result[0][0].value
-
-        # Paginate the query
         offset = (page - 1) * page_size
-        paged_query = query.limit(page_size).offset(offset)
-        
+        query = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING)
+        paged_query = query.limit(page_size + 1).offset(offset)
         items = [_doc_to_dict(doc) for doc in paged_query.stream()]
-        
-        # Enhance items with admin-specific fields
+
+        if len(items) > page_size:
+            next_page = page + 1
+            items = items[:page_size]
+
         for item in items:
             item["storage_bytes"] = item.get("storage_bytes", "—")
             item["error_message"] = item.get("error_message", None)
             item["extract_status"] = item.get("extract_status", None)
 
     except FailedPrecondition as e:
-        logger.error(f"Firestore index missing or permission error in admin_dashboard: {e}", exc_info=True)
-        items = []
-        total_count = 0
+        logging.error(f"Firestore index missing or permission error in admin_dashboard: {e}", exc_info=True)
         flash(f"Database query failed, likely due to a missing Firestore index. Please check the application logs for an index creation link. Error: {e}", "error")
     except Exception as e:
-        logger.error(f"Error fetching admin dashboard data: {e}", exc_info=True)
-        items = []
-        total_count = 0
+        logging.error(f"Error fetching admin dashboard data: {e}", exc_info=True)
         flash("Error fetching articles. Please try again later.", "error")
 
     prev_page = page - 1 if page > 1 else None
-    next_page = page + 1 if (page * page_size) < total_count else None
 
     return render_template(
         "admin.html",
         items=items,
-        total_count=total_count,
         page=page,
         prev_page=prev_page,
         next_page=next_page,
-        page_size=page_size,
-        error=None # Already handled by flash
+        page_size=page_size
     )
 
-
-# --- Admin Action: Retry Extraction/Processing ---
-@app.route("/admin/reprocess/<item_id>", methods=["POST"])
+@admin_bp.route("/reprocess/<item_id>", methods=["POST"])
 @login_required
 @admin_required
-def admin_reprocess_item(item_id):
-    doc_ref = db.collection("items").document(item_id)
+@get_item_or_abort
+def reprocess_item(item_id, doc_ref, doc):
+    logging.info(f"Admin {current_user.id} triggered reprocess for item: {item_id}")
     try:
-        doc = doc_ref.get()
-        if not doc.exists:
-            return _api_error("Item not found", 404)
-
-        d = doc.to_dict()
-        url = d.get("url")
-        voice = d.get("voice", DEFAULT_VOICE)
-
-        logger.info(f"[ADMIN] Reprocessing item {item_id} (url: {url})")
-        doc_ref.update({"status": "processing", "error_message": None})
-
-        _process_article_submission(doc_ref, url, voice)
-
-        return jsonify({"success": True})
+        item = doc.to_dict()
+        url = item.get("url")
+        voice = item.get("voice", current_app.config["DEFAULT_VOICE"])
+        doc_ref.update({"status": "reprocessing", "error_message": None})
+        process_article_submission(doc_ref, url, voice)
+        return api_success(message=f"Item {item_id} is being reprocessed.")
     except Exception as e:
         error_message = f"Reprocess failed for item {item_id}: {e}"
-        logger.error(error_message, exc_info=True)
+        logging.error(error_message, exc_info=True)
         try:
             doc_ref.update({"status": "error", "error_message": str(e)})
         except Exception as update_err:
-            logger.error(f"Error updating doc after reprocess failure: {update_err}")
-        return _api_error(str(e), 500)
+            logging.error(f"Error updating doc after reprocess failure: {update_err}")
+        return api_error(str(e), 500)
 
-
-# --- API for Admin DataTable (JS/AJAX) ---
-@app.route("/api/admin/items")
+@admin_bp.route("/delete/<item_id>", methods=["POST"])
 @login_required
 @admin_required
-def api_admin_items():
+@get_item_or_abort
+def delete_item(item_id, doc_ref, doc):
+    logging.info(f"Admin {current_user.id} triggered delete for item: {item_id}")
     try:
-        items_ref = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(500)
-        result = [_doc_to_dict(doc) for doc in items_ref.stream()]
-        return jsonify({"items": result})
+        gcs_path = doc.to_dict().get("gcs_path")
+        if gcs_path:
+            blob = bucket.blob(gcs_path)
+            if blob.exists():
+                blob.delete()
+                logging.info(f"Deleted GCS file: {gcs_path}")
+
+        doc_ref.delete()
+        logging.info(f"Deleted Firestore document: {item_id}")
+        
+        return api_success(message=f"Item {item_id} and associated file deleted.")
     except Exception as e:
-        logger.error(f"Error in api_admin_items: {e}", exc_info=True)
-        return _api_error(str(e), 500)
+        error_message = f"Delete failed for item {item_id}: {e}"
+        logging.error(error_message, exc_info=True)
+        return api_error(str(e), 500)
 
-@app.route('/feed.xml')
-@cache.cached(timeout=300)  # Cache this view for 5 minutes
-def podcast_feed():
-    app_config = {
-        "APP_URL_ROOT": request.url_root,
-        "GCS_BUCKET_NAME": GCS_BUCKET_NAME
-    }
-    feed_xml = generate_feed(db, storage_client, app_config)
-    return Response(feed_xml, mimetype='application/rss+xml')
-
-# --- Submit route ---
-@app.route("/submit", methods=["GET", "POST"])
+@admin_bp.route("/retry/<item_id>", methods=["POST"])
 @login_required
-def submit_url():
-    if db is None:
-        return _api_error("Database not initialized", 500)
+@admin_required
+def retry_item(item_id):
+    # This is identical to reprocess, so we can just call that function
+    return reprocess_item(item_id)
 
-    if request.method == "GET":
-        return render_template("submit.html", voices=ALLOWED_VOICES, default_voice=DEFAULT_VOICE)
-
-    # POST request
+@admin_bp.route("/bulk", methods=["POST"])
+@login_required
+@admin_required
+def bulk_action():
     data = request.get_json()
-    if not data:
-        return _api_error("Invalid request.", 400)
+    action = data.get("action")
+    ids = data.get("ids")
 
-    url = data.get("url", "").strip()
-    if not url:
-        return _api_error("URL is required.", 400)
+    if not action or not ids:
+        return api_error("Missing 'action' or 'ids' in request.", 400)
 
-    voice = data.get("voice", DEFAULT_VOICE)
-    tags_input = data.get("tags", "")
-    tags = [t.strip() for t in tags_input.split(",") if t.strip()]
-
-    logger.info(f"Submission received for URL: {url} by user: {current_user.id}")
-
-    doc_ref = db.collection("items").document()
-    item_id = doc_ref.id
-    try:
-        # Create initial document
-        doc_ref.set({
-            "id": item_id, "user_id": current_user.id, "url": url,
-            "title": "Pending Extraction...", "status": "queued", "voice": voice,
-            "tags": tags, "submitted_at": firestore.SERVER_TIMESTAMP,
-            "submitted_ip": request.remote_addr, "error_message": None
-        })
-
-        # If Cloud Tasks is configured, create a task. Otherwise, process inline.
-        if tasks_client:
-            task = {
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": TTS_TASK_HANDLER_URL,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": jsonify({"item_id": item_id}).data,
-                    "oidc_token": {
-                        "service_account_email": TTS_TASK_SERVICE_ACCOUNT_EMAIL,
-                    },
-                }
-            }
-            parent = tasks_client.queue_path(GCP_PROJECT_ID, GCP_LOCATION_ID, TTS_TASK_QUEUE_ID)
-            tasks_client.create_task(parent=parent, task=task)
-            logger.info(f"Created Cloud Task for item_id: {item_id}")
-        else:
-            # Fallback to inline processing if Cloud Tasks is not set up
-            logger.warning(f"Processing item inline (no Cloud Tasks): {item_id}")
-            _process_article_submission(doc_ref, url, voice)
-
-        return jsonify({"success": True, "redirect": url_for("list_items")})
-
-    except Exception as e:
-        error_message = f"Processing failed for {url}: {e}"
-        logger.error(error_message, exc_info=True)
+    logging.info(f"Admin {current_user.id} triggered bulk action '{action}' for items: {', '.join(ids)}")
+    results = {}
+    for item_id in ids:
         try:
-            doc_ref.update({"status": "error", "error_message": str(e)})
-        except Exception as update_err:
-            logger.error(f"Error updating doc with failure status: {update_err}")
-        
-        return _api_error(str(e), 500)
+            doc_ref = db.collection("items").document(item_id)
+            doc = doc_ref.get()
+            if not doc.exists:
+                results[item_id] = "Failed: Not Found"
+                continue
 
-# --- List items ---
-@app.route("/items")
+            if action == "delete":
+                gcs_path = doc.to_dict().get("gcs_path")
+                if gcs_path:
+                    blob = bucket.blob(gcs_path)
+                    if blob.exists():
+                        blob.delete()
+                doc_ref.delete()
+                results[item_id] = "Success"
+            elif action == "retry":
+                item = doc.to_dict()
+                url = item.get("url")
+                voice = item.get("voice", current_app.config["DEFAULT_VOICE"])
+                doc_ref.update({"status": "reprocessing", "error_message": None})
+                process_article_submission(doc_ref, url, voice)
+                results[item_id] = "Success"
+            else:
+                return api_error(f"Unknown bulk action: {action}", 400)
+        except Exception as e:
+            results[item_id] = f"Failed: {str(e)}"
+            logging.error(f"Bulk action '{action}' failed for item {item_id}: {e}", exc_info=True)
+            
+    return api_success(data={"results": results})
+
+@admin_bp.route("/retry-stuck", methods=["POST"])
 @login_required
-def list_items():
+@admin_required
+def retry_stuck_items():
     try:
-        items_ref = db.collection("items")             .where("user_id", "==", current_user.id)             .order_by("submitted_at", direction=firestore.Query.DESCENDING)             .limit(50)
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+        stuck_items_query = db.collection("items").where("status", "==", "processing").where("submitted_at", "<=", one_hour_ago).order_by("submitted_at", direction=firestore.Query.ASCENDING)
         
-        result = [_doc_to_dict(doc) for doc in items_ref.stream()]
+        stuck_items = stuck_items_query.stream()
+        
+        count = 0
+        for item_doc in stuck_items:
+            item_id = item_doc.id
+            doc_ref = item_doc.reference
+            item = item_doc.to_dict()
+            logging.info(f"Retrying stuck item: {item_id}")
+            
+            try:
+                url = item.get("url")
+                voice = item.get("voice", current_app.config["DEFAULT_VOICE"])
+                doc_ref.update({"status": "reprocessing", "error_message": None})
+                process_article_submission(doc_ref, url, voice)
+                count += 1
+            except Exception as e:
+                logging.error(f"Failed to retry item {item_id} during stuck-item-retry: {e}", exc_info=True)
 
-        return render_template("items.html", items=result)
+        return api_success(message=f"Attempted to retry {count} stuck item(s).")
     except Exception as e:
-        logger.error(f"Error listing items: {e}", exc_info=True)
-        return jsonify({"error": "Could not fetch items"}), 500
+        logging.error(f"Failed to query for stuck items: {e}", exc_info=True)
+        return api_error(str(e), 500)
 
-
-# --- Tag edit (form POST) ---
-@app.route("/item/<item_id>/tags", methods=["POST"])
-@login_required
-def update_tags(item_id):
-    try:
-        doc_ref = db.collection("items").document(item_id)
-        tags_str = request.form.get("tags", "")
-        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
-        doc_ref.update({"tags": tags})
-        flash("Tags updated.", "success")
-    except Exception as e:
-        logger.error(f"Error updating tags for item {item_id}: {e}", exc_info=True)
-        flash("Failed to update tags.", "error")
-    return redirect(url_for("item_detail", item_id=item_id))
-
-# --- Item detail (render text as paragraphs, handle tags) ---
-@app.route("/item/<item_id>")
-def item_detail(item_id):
-    doc = db.collection("items").document(item_id).get()
-    if not doc.exists:
-        return "Not found", 404
-    item = doc.to_dict()
-    item['id'] = item_id
-    full_text = item.get('text') or item.get('text_preview') or ""
-    paragraphs = [p.strip() for p in full_text.split('\n\n') if p.strip()]
-    if len(paragraphs) <= 1:
-        paragraphs = [p.strip() for p in full_text.splitlines() if p.strip()]
-    tags = item.get("tags", [])
-    if isinstance(tags, str):
-        tags = [t.strip() for t in tags.split(",") if t.strip()]
-    is_authenticated = current_user.is_authenticated if hasattr(current_user, "is_authenticated") else False
-    return render_template(
-        "item_detail.html",
-        item=item,
-        paragraphs=paragraphs,
-        tags=tags,
-        is_authenticated=is_authenticated
-    )
-
-# --- Health check ---
-@app.route("/health")
-def health():
-    return jsonify({
-        "status": "ok",
-        "db": bool(db),
-        "tasks": bool(tasks_client)
-    })
-
-# This is a new route to display articles that failed processing
-@app.route("/failed-articles")
+@admin_bp.route("/failed-articles")
 @login_required
 @admin_required
 def failed_articles():
@@ -552,28 +414,61 @@ def failed_articles():
         errors = [_doc_to_dict(doc) for doc in items_ref.stream()]
         return render_template("failed_articles.html", errors=errors)
     except FailedPrecondition as e:
-        logger.error(f"Firestore index missing or permission error in failed_articles: {e}", exc_info=True)
+        logging.error(f"Firestore index missing or permission error in failed_articles: {e}", exc_info=True)
         flash(f"Database query failed, likely due to a missing Firestore index. Please check the application logs for an index creation link. Error: {e}", "error")
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin.dashboard"))
     except Exception as e:
-        logger.error(f"Error fetching failed articles: {e}", exc_info=True)
+        logging.error(f"Error fetching failed articles: {e}", exc_info=True)
         flash("Could not fetch failed articles.", "error")
-        return redirect(url_for("admin_dashboard"))
-
-# --- Error Handlers ---
-@app.errorhandler(404)
-def not_found_error(error):
-    logger.warning(f"404 Not Found: {request.path}")
-    return render_template("404.html"), 404
+        return redirect(url_for("admin.dashboard"))
 
 
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logger.error(f"Unhandled exception: {e}", exc_info=True)
-    if request.path.startswith('/api/') or request.is_json:
-        return _api_error("An internal error occurred.", 500)
-    return render_template("generic_error.html", error_message=str(e)), 500
 
+# --- Task Handler ---
+@main_bp.route("/task-handler", methods=["POST"])
+def task_handler():
+    data = request.get_json()
+    if not data or not (item_id := data.get("item_id")):
+        return api_error("item_id is required", 400)
+    
+    doc_ref = db.collection("items").document(item_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        # Acknowledge the task by returning 200 even if item is not found,
+        # to prevent Cloud Tasks from retrying a non-existent item.
+        logging.warning(f"Task handler received non-existent item_id: {item_id}. Task will be acknowledged.")
+        return api_success(message=f"Item {item_id} not found, task acknowledged.", code=200)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)), debug=True)
+    item = doc.to_dict()
+    try:
+        doc_ref.update({"status": "processing"})
+        process_article_submission(doc_ref, item.get("url"), item.get("voice", current_app.config["DEFAULT_VOICE"]))
+        return api_success(message=f"Successfully processed item {item_id}.")
+    except Exception as e:
+        logging.error(f"Task handler failed for item {item_id}: {e}", exc_info=True)
+        doc_ref.update({"status": "error", "error_message": str(e)})
+        # Return 500 to signal Cloud Tasks to retry the task.
+        return api_error(str(e), 500)
+
+def create_app():
+    app = Flask(__name__, static_folder="static", template_folder="templates")
+    app.config.from_object(config)
+    
+    # --- Logging ---
+    logging.basicConfig(level=app.config["LOG_LEVEL"], format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s")
+
+    # --- Security ---
+    if not app.config["DEBUG"]:
+        Talisman(app, content_security_policy=None)
+
+    # --- Caching ---
+    Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
+    
+    # --- Login Manager ---
+    login_manager.init_app(app)
+    
+    # --- Register Blueprints ---
+    app.register_blueprint(main_bp)
+    app.register_blueprint(admin_bp)
+
+    return app

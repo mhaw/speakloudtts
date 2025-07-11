@@ -1,16 +1,11 @@
 {% extends "base.html" %}
-
-{% block head %}
-  {{ super() }}
-  {# Add meta for sharing if you like #}
-{% endblock %}
-
+{% block title %}{{ item.title or "Article" }}{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto py-8 space-y-6">
 
   <!-- Header -->
   <div>
-    <a href="{{ url_for('list_items') }}" class="btn btn-ghost btn-sm mb-4">
+    <a href="{{ url_for('main.list_items') }}" class="btn btn-ghost btn-sm mb-4">
       ← Back to all articles
     </a>
     <h1 class="text-4xl font-bold break-words">{{ item.title or "Untitled Article" }}</h1>
@@ -44,7 +39,7 @@
         </a>
         {% endif %}
         {% if is_authenticated and item.status != 'complete' %}
-        <form method="POST" action="{{ url_for('admin_reprocess_item', item_id=item.id) }}" class="inline">
+        <form method="POST" action="{{ url_for('main.admin_reprocess_item', item_id=item.id) }}" class="inline">
           <button type="submit" class="btn btn-sm btn-warning">Reprocess</button>
         </form>
         {% endif %}
@@ -63,7 +58,7 @@
       {% endfor %}
     </div>
     {% if is_authenticated %}
-    <form method="POST" action="{{ url_for('update_tags', item_id=item.id) }}" class="flex items-center gap-2 mt-4">
+    <form method="POST" action="{{ url_for('main.update_tags', item_id=item.id) }}" class="flex items-center gap-2 mt-4">
       <input type="text" name="tags" value="{{ tags|join(', ') }}" placeholder="Add tags: news, tech" class="input input-bordered input-sm w-full max-w-xs" />
       <button type="submit" class="btn btn-sm btn-primary">Save Tags</button>
     </form>

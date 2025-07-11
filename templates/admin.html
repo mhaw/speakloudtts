@@ -74,7 +74,7 @@
           <td class="px-3 py-2">{{ item.submitted_at_fmt or "—" }}</td>
           <td class="px-3 py-2">{{ item.storage_bytes or "—" }}</td>
           <td class="px-3 py-2 flex flex-wrap gap-1">
-            <a href="{{ url_for('item_detail', item_id=item.id) }}" class="text-blue-600 hover:underline">View</a>
+            <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="text-blue-600 hover:underline">View</a>
             <button type="button" class="reprocess-btn text-xs text-yellow-700 hover:underline" data-id="{{ item.id }}">Reprocess</button>
             <button type="button" class="delete-btn text-xs text-red-600 hover:underline" data-id="{{ item.id }}">Delete</button>
             {% if item.status == 'error' or item.status == 'processing' %}

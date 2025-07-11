@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirm(`Are you sure you want to ${action} ${ids.length} item(s)?`)) return;
     setActionWorking(true);
     try {
-      const res = await fetch(`/api/admin/bulk`, {
+      const res = await fetch(`/admin/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ids })
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('retry-stuck')?.addEventListener('click', async () => {
     if (!confirm("Retry all stuck items?")) return;
     try {
-      const res = await fetch(`/api/admin/retry-stuck`, { method: 'POST' });
+      const res = await fetch(`/admin/retry-stuck`, { method: 'POST' });
       if (!res.ok) throw new Error(await res.text());
       alert('Retry enqueued for all stuck items.');
       window.location.reload();
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!confirm(`Reprocess item ${id}?`)) return;
       try {
         e.target.disabled = true;
-        const res = await fetch(`/api/admin/reprocess/${id}`, { method: 'POST' });
+        const res = await fetch(`/admin/reprocess/${id}`, { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         alert('Reprocess triggered.');
         window.location.reload();
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!confirm(`Delete item ${id}? This cannot be undone.`)) return;
       try {
         e.target.disabled = true;
-        const res = await fetch(`/api/admin/delete/${id}`, { method: 'POST' });
+        const res = await fetch(`/admin/delete/${id}`, { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         alert('Delete triggered.');
         window.location.reload();
@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const id = e.target.dataset.id;
       try {
         e.target.disabled = true;
-        const res = await fetch(`/api/admin/retry/${id}`, { method: 'POST' });
+        const res = await fetch(`/admin/retry/${id}`, { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         alert('Retry triggered.');
         window.location.reload();

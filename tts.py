@@ -169,17 +169,15 @@ def synthesize_long_text(title: str, author: str, full_text: str, item_id: str, 
             blob.upload_from_filename(merged_path, content_type="audio/mpeg")
             logger.info(f"TTS: Uploaded to gs://{GCS_BUCKET}/{output_gcs_filename}")
 
-            uri = f"https://storage.googleapis.com/{GCS_BUCKET}/{output_gcs_filename}"
             return {
-                "uri": uri,
+                "gcs_path": output_gcs_filename,
                 "duration_seconds": duration,
                 "gcs_bucket": GCS_BUCKET,
-                "gcs_path": output_gcs_filename,
                 "num_segments": len(segment_files),
                 "error": None
             }
     except Exception as e:
         logger.error(f"TTS: Critical error for {item_id}: {e}", exc_info=True)
         return {
-            "uri": None, "duration_seconds": 0, "error": f"Synthesis process failed: {str(e)}"
+            "gcs_path": None, "duration_seconds": 0, "error": f"Synthesis process failed: {str(e)}"
         }
