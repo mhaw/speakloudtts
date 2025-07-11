@@ -3,33 +3,45 @@
 {% block title %}All Articles · SpeakLoudTTS{% endblock %}
 
 {% block content %}
-  <div class="container mx-auto py-8">
-    <h2 class="text-2xl font-semibold mb-4">All Articles</h2>
-    <table class="w-full table-auto">
-      <thead>
-        <tr>
-          <th class="text-left px-4 py-2">Title</th>
-          <th class="text-left px-4 py-2">Submitted</th>
-          <th class="text-left px-4 py-2">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for it in items %}
-          <tr>
-            <td class="px-4 py-2">
-              <a href="{{ url_for('item_detail', item_id=it['id']) }}" class="text-primary hover:underline">
-                {{ it.title or "Untitled" }}
-              </a>
-            </td>
-            <td class="px-4 py-2">{{ it.submitted_at_fmt }}</td>
-            <td class="px-4 py-2">{{ it.status|capitalize }}</td>
-          </tr>
-        {% else %}
-          <tr>
-            <td colspan="3" class="text-center text-gray-400 py-6">No items yet.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="container mx-auto py-8">
+  <div class="flex justify-between items-center mb-8">
+    <h2 class="text-3xl font-bold">All Articles</h2>
+    <a href="/submit" class="btn btn-primary">Add New</a>
   </div>
+
+  <div class="space-y-4">
+    {% for item in items %}
+    <div class="card lg:card-side bg-base-200 shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title">
+          <a href="{{ url_for('item_detail', item_id=item['id']) }}" class="link link-hover">
+            {{ item.title or "Untitled Article" }}
+          </a>
+        </h3>
+        <p class="text-sm text-base-content/60">
+          Submitted on {{ item.submitted_at_fmt }}
+        </p>
+        <div class="card-actions justify-end items-center">
+          <div class="badge 
+            {% if item.status == 'processed' %}badge-success
+            {% elif item.status == 'failed' %}badge-error
+            {% else %}badge-ghost
+            {% endif %}
+            badge-outline">
+            {{ item.status | capitalize }}
+          </div>
+          <a href="{{ url_for('item_detail', item_id=item['id']) }}" class="btn btn-sm btn-ghost">
+            View Details
+          </a>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center py-12">
+      <p class="text-lg text-base-content/70">No articles have been submitted yet.</p>
+      <a href="/submit" class="btn btn-primary mt-4">Submit the First One</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
 {% endblock %}

@@ -8,81 +8,67 @@
   <meta name="description" content="Convert articles into high-quality audio with SpeakLoudTTS.">
   <title>{% block title %}SpeakLoudTTS{% endblock %} | SpeakLoudTTS</title>
 
-  <!-- Tailwind + Typography + Forms -->
-  <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: { colors: { primary: '#2563eb' } }
-      },
-      transitionProperty: { 'all': 'all' }
-    }
-  </script>
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Local Tailwind CSS -->
+  <link href="{{ url_for('static', filename='css/output.css') }}" rel="stylesheet">
 
   <style>
-    .interactive {
-      transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
-    }
-    .interactive:hover {
-      transform: scale(1.05);
-    }
-    .interactive:active {
-      opacity: 0.75;
-    }
-    /* Accessibility: Make skip link visible on focus */
-    .sr-only:focus:not(:focus-visible) { display: none; }
-    .sr-only:focus { 
-      position: static !important; 
-      clip: auto !important; 
-      width: auto !important; 
-      height: auto !important; 
-      margin: 0 !important; 
-      padding: .5rem 1rem; 
-      background: #2563eb; 
-      color: #fff;
-      border-radius: .375rem;
-      z-index: 50;
-    }
+    /* Custom base styles can go here if needed */
   </style>
 
   {% block head %}{% endblock %}
 </head>
-<body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
+<body class="min-h-screen bg-base-100 text-base-content">
 
   <!-- Skip to main content for accessibility -->
-  <a href="#main-content" class="sr-only focus:not-sr-only absolute left-2 top-2 z-50 bg-primary text-white px-2 py-1 rounded">Skip to main content</a>
+  <a href="#main-content" class="sr-only focus:not-sr-only absolute left-2 top-2 z-50 bg-primary text-primary-content px-2 py-1 rounded">Skip to main content</a>
 
   <!-- Navbar -->
-  <nav class="interactive bg-white dark:bg-gray-800 shadow mb-8">
-    <div class="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center">
-      <a href="/" class="interactive flex items-center space-x-2 text-xl font-bold">
-        <span role="img" aria-label="mic">🎤</span>
-        <span>SpeakLoudTTS</span>
-      </a>
-      <div class="mt-2 sm:mt-0 flex items-center space-x-4">
-        <a href="/submit" class="interactive hover:underline {% if request.path=='/submit' %}underline{% endif %}" {% if request.path=='/submit' %}aria-current="page"{% endif %}>Submit</a>
-        <a href="/items" class="interactive hover:underline {% if request.path.startswith('/items') %}underline{% endif %}" {% if request.path.startswith('/items') %}aria-current="page"{% endif %}>All Articles</a>
-        <a href="/feed.xml" class="interactive hover:underline">📰 Feed</a>
-        <a href="/errors" class="interactive hover:underline {% if request.path=='/errors' %}underline{% endif %}" {% if request.path=='/errors' %}aria-current="page"{% endif %}>⚠️ Errors</a>
-        <a href="/admin" class="interactive hover:underline {% if request.path.startswith('/admin') %}underline{% endif %}" {% if request.path.startswith('/admin') %}aria-current="page"{% endif %}>🔧 Admin</a>
-        {% if current_user.is_authenticated %}
-          <span class="px-4 dark:text-gray-300">Hi, {{ current_user.username }}</span>
-          <a href="{{ url_for('logout') }}" class="interactive hover:underline">Logout</a>
-        {% else %}
-          <a href="{{ url_for('login') }}" class="interactive hover:underline">Login</a>
-        {% endif %}
+  <div class="navbar bg-base-200 shadow-md mb-8">
+    <div class="container mx-auto">
+      <div class="flex-1">
+        <a href="/" class="btn btn-ghost text-xl">
+          <span role="img" aria-label="mic">🎤</span>
+          SpeakLoudTTS
+        </a>
+      </div>
+      <div class="flex-none">
+        <ul class="menu menu-horizontal px-1">
+          <li><a href="/submit" class="{% if request.path=='/submit' %}active{% endif %}">Submit</a></li>
+          <li><a href="/items" class="{% if request.path.startswith('/items') %}active{% endif %}">Articles</a></li>
+          <li><a href="/feed.xml">📰 Feed</a></li>
+          <li><a href="/failed-articles" class="{% if request.path=='/failed-articles' %}active{% endif %}">⚠️ Failed</a></li>
+          <li><a href="/admin" class="{% if request.path.startswith('/admin') %}active{% endif %}">🔧 Admin</a></li>
+          {% if current_user.is_authenticated %}
+            <li>
+              <details>
+                <summary>Hi, {{ current_user.username }}</summary>
+                <ul class="p-2 bg-base-100 rounded-t-none">
+                  <li><a href="{{ url_for('logout') }}">Logout</a></li>
+                </ul>
+              </details>
+            </li>
+          {% else %}
+            <li><a href="{{ url_for('login') }}">Login</a></li>
+          {% endif %}
+        </ul>
       </div>
     </div>
-  </nav>
+  </div>
 
-  <main id="main-content" class="max-w-3xl mx-auto px-4">
+  <main id="main-content" class="container mx-auto px-4">
     {% block content %}{% endblock %}
   </main>
 
   <!-- Footer -->
-  <footer class="text-center text-xs py-4 text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-800">
-    &copy; 2025 SpeakLoudTTS. All rights reserved.
+  <footer class="footer footer-center p-4 bg-base-300 text-base-content mt-12">
+    <aside>
+      <p>&copy; 2025 SpeakLoudTTS. All rights reserved.</p>
+    </aside>
   </footer>
 
   {% block scripts %}{% endblock %}

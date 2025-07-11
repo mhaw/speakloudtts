@@ -139,4 +139,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init
   updateSelectionCount();
   console.log('Admin dashboard JS loaded.');
-});
+})

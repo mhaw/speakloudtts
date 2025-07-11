@@ -53,42 +53,35 @@ document.addEventListener('DOMContentLoaded', () => {
         statusDiv.className = 'min-h-[2em] text-center';
 
         try {
-            const formData = new FormData(form);
+            const data = {
+                url: url,
+                voice: voiceSelect.value,
+                tags: tagsInput.value
+            };
 
             const response = await fetch('/submit', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
             });
 
-            if (response.redirected) {
-                window.location.href = response.url;
-                return;
-            }
-
-            let data, errorText;
-            try {
-                data = await response.json();
-            } catch (jsonErr) {
-                errorText = await response.text();
-            }
+            const responseData = await response.json();
 
             if (!response.ok) {
-                throw new Error(
-                    (data && data.error) ||
-                    errorText ||
-                    `Server error (${response.status})`
-                );
+                throw new Error(responseData.error || `Server error (${response.status})`);
             }
 
-            statusDiv.textContent = (data && data.message) || 'Submission successful!';
-            statusDiv.className = 'text-green-600 min-h-[2em] text-center';
-
-            // Extra: animate success
-            statusDiv.classList.add('animate-pulse');
-            setTimeout(() => statusDiv.classList.remove('animate-pulse'), 1500);
-
-            form.reset();
-            urlInput.classList.remove('border-red-500');
+            if (responseData.success && responseData.redirect) {
+                // On success, redirect to the items list
+                window.location.href = responseData.redirect;
+            } else {
+                // Handle cases where there might be a success message but no redirect
+                statusDiv.textContent = responseData.message || 'Submission processed!';
+                statusDiv.className = 'text-green-600 min-h-[2em] text-center';
+                form.reset();
+            }
         } catch (err) {
             statusDiv.textContent = `Error: ${err.message}`;
             statusDiv.className = 'text-red-500 min-h-[2em] text-center';

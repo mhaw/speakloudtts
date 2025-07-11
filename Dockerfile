@@ -3,14 +3,10 @@
 # ─── Builder Stage ──────────────────────────────────────────────
 FROM python:3.11-slim AS builder
 
-RUN dpkg --print-architecture && \
-    if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
-      echo "x86_64 detected"; \
-    fi
-
-# Install build tools + headers for cryptography, lxml, etc.
+# Install build tools, headers, and Node.js for frontend build
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+      curl \
       ffmpeg \
       libxml2 \
       libxslt1.1 \
@@ -18,13 +14,22 @@ RUN apt-get update && \
       libffi-dev \
       zlib1g \
       ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
     
-WORKDIR /install
+WORKDIR /app
 
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# Install Node.js dependencies and build CSS
+COPY package.json package-lock.json* tailwind.config.js ./
+COPY static/css/input.css static/css/input.css
+RUN npm install && \
+    npm run build:css
 
 # ─── Runner Stage ───────────────────────────────────────────────
 FROM python:3.11-slim AS runner
@@ -45,6 +50,7 @@ WORKDIR /app
 
 # Copy dependencies from builder
 COPY --from=builder /install /usr/local
+COPY --from=builder /app/static/css/output.css /app/static/css/output.css
 
 # Copy app code
 COPY . .

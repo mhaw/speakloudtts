@@ -1,124 +1,124 @@
 {% extends "base.html" %}
+
 {% block head %}
-  <!-- Add meta for sharing if you like -->
   {{ super() }}
+  {# Add meta for sharing if you like #}
 {% endblock %}
+
 {% block content %}
-<div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 shadow">
-  <div class="max-w-2xl mx-auto px-4 py-4 flex flex-col gap-2">
-    <a href="{{ url_for('list_items') }}" class="text-sm text-gray-500 hover:text-blue-600 mb-1">
+<div class="max-w-3xl mx-auto py-8 space-y-6">
+
+  <!-- Header -->
+  <div>
+    <a href="{{ url_for('list_items') }}" class="btn btn-ghost btn-sm mb-4">
       ← Back to all articles
     </a>
-    <h1 class="text-2xl sm:text-3xl font-bold text-primary mb-1 break-words">{{ item.title or "Untitled" }}</h1>
-    <div class="flex flex-col sm:flex-row sm:items-center sm:gap-4 text-gray-600 dark:text-gray-400 text-sm mb-2">
+    <h1 class="text-4xl font-bold break-words">{{ item.title or "Untitled Article" }}</h1>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-base-content/70 text-sm mt-2">
       <span>By <strong>{{ item.author or "Unknown" }}</strong></span>
-      {% if item.publish_date_fmt %}<span class="hidden sm:inline">|</span><span>{{ item.publish_date_fmt }}</span>{% endif %}
-      {% if item.word_count %}<span class="hidden sm:inline">|</span><span>{{ item.word_count }} words</span>{% endif %}
-      {% if item.reading_time_min %}<span class="hidden sm:inline">|</span><span>~{{ item.reading_time_min }} min read</span>{% endif %}
-      {% if item.status %}<span class="hidden sm:inline">|</span>
-        <span class="inline-flex items-center gap-1 {{ 'text-green-600' if item.status == 'complete' else 'text-yellow-600' if item.status == 'processing' else 'text-red-600' }}">
-          {{ item.status|capitalize }}
-        </span>
-      {% endif %}
+      {% if item.publish_date_fmt %}<span>{{ item.publish_date_fmt }}</span>{% endif %}
+      {% if item.word_count %}<span>{{ item.word_count }} words</span>{% endif %}
+      {% if item.reading_time_min %}<span>~{{ item.reading_time_min }} min read</span>{% endif %}
     </div>
-    <div class="w-full flex items-center justify-center p-2 bg-gray-100 dark:bg-gray-800 rounded">
+  </div>
+
+  <!-- Audio Player Card -->
+  <div class="card bg-base-200 shadow-sm">
+    <div class="card-body">
+      <h2 class="card-title">Listen Now</h2>
       {% if item.audio_url %}
-        <audio id="audio-player" controls preload="auto" class="w-full max-w-xl" src="{{ item.audio_url }}">
+        <audio id="audio-player" controls preload="auto" class="w-full" src="{{ item.audio_url }}">
           Your browser doesn’t support audio playback.
         </audio>
       {% elif item.status == 'processing' %}
-        <span class="text-yellow-600">Audio is still processing. Please check back later.</span>
+        <div class="alert alert-info">Audio is still processing. Please check back later.</div>
       {% else %}
-        <span class="text-red-600">Audio unavailable for this article.</span>
+        <div class="alert alert-error">Audio unavailable for this article.</div>
       {% endif %}
+      
+      <div class="card-actions justify-start items-center mt-4 space-x-2">
+        <button id="copy-link-btn" type="button" class="btn btn-sm btn-ghost">Copy Link</button>
+        {% if item.audio_url %}
+        <a href="{{ item.audio_url }}" download="{{ item.title|replace(' ', '_') }}.mp3" class="btn btn-sm btn-ghost">
+          Download Audio
+        </a>
+        {% endif %}
+        {% if is_authenticated and item.status != 'complete' %}
+        <form method="POST" action="{{ url_for('admin_reprocess_item', item_id=item.id) }}" class="inline">
+          <button type="submit" class="btn btn-sm btn-warning">Reprocess</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
-    <div class="flex items-center space-x-2 mb-4">
-      <button id="copy-link-btn" type="button"
-        class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-        aria-label="Copy article link">
-        Copy Link
-      </button>
-      {% if item.audio_url %}
-      <a href="{{ item.audio_url }}" download="{{ item.title|replace(' ', '_') }}.mp3"
-         class="inline-flex items-center px-3 py-1 bg-primary text-white rounded shadow hover:bg-blue-700 text-sm"
-         aria-label="Download audio">
-        ⬇ Download Audio
-      </a>
-      {% endif %}
-      {% if is_authenticated and item.status != 'complete' %}
-      <form method="POST" action="{{ url_for('reprocess_item', item_id=item.id) }}" style="display:inline;">
-        <button type="submit" class="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm">
-          Reprocess
-        </button>
-      </form>
-      {% endif %}
-    </div>
-    {% if is_authenticated %}
-    <div class="flex flex-col sm:flex-row sm:items-center gap-3 mt-2 mb-3">
-      <form method="POST" action="{{ url_for('update_tags', item_id=item.id) }}" class="flex items-center gap-2 w-full sm:w-auto">
-        <input type="text" name="tags" value="{{ tags|join(', ') }}" placeholder="comma,separated"
-               class="px-3 py-1 border rounded dark:bg-gray-800 dark:border-gray-600 text-sm w-full sm:w-56" autocomplete="off">
-        <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded text-sm">Save Tags</button>
-      </form>
-    </div>
-    {% endif %}
   </div>
-</div>
 
-<div class="max-w-2xl mx-auto px-4 py-4 space-y-4">
-  <details class="bg-white dark:bg-gray-800 p-3 rounded shadow mb-2" open>
-    <summary class="font-medium cursor-pointer">Metadata</summary>
-    <ul class="mt-2 list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
-      <li><strong>Original URL:</strong>
-        <a href="{{ item.url }}" target="_blank" class="text-primary hover:underline break-all">{{ item.url }}</a>
-      </li>
-      <li><strong>Last Modified:</strong> {{ item.last_modified or "–" }}</li>
-      <li><strong>ETag:</strong> {{ item.etag or "–" }}</li>
-      {% if item.domain %}<li><strong>Domain:</strong> {{ item.domain }}</li>{% endif %}
-      {% if item.publisher %}<li><strong>Publisher:</strong> {{ item.publisher }}</li>{% endif %}
-      {% if item.section %}<li><strong>Section:</strong> {{ item.section }}</li>{% endif %}
-      {% if item.storage_bytes %}<li><strong>Size:</strong> {{ (item.storage_bytes // 1024) }} KB</li>{% endif %}
-      {% if item.submitted_ip %}<li><strong>Submitted by IP:</strong> {{ item.submitted_ip }}</li>{% endif %}
-      {% if item.submitted_at_fmt %}<li><strong>Submitted at:</strong> {{ item.submitted_at_fmt }}</li>{% endif %}
-      <li><strong>Status:</strong> {{ item.status|capitalize or '—' }}</li>
-    </ul>
-  </details>
+  <!-- Tags -->
   <div>
-    <label class="block font-medium mb-1">Tags:</label>
-    <div class="flex flex-wrap gap-2 mb-2">
+    <h3 class="text-lg font-semibold mb-2">Tags</h3>
+    <div class="flex flex-wrap gap-2">
       {% for tag in tags %}
-        <span class="bg-gray-200 dark:bg-gray-700 text-xs px-2 py-1 rounded">{{ tag }}</span>
+        <div class="badge badge-outline">{{ tag }}</div>
       {% else %}
-        <span class="text-gray-400 text-xs">None</span>
+        <span class="text-sm text-base-content/50">No tags yet.</span>
       {% endfor %}
     </div>
+    {% if is_authenticated %}
+    <form method="POST" action="{{ url_for('update_tags', item_id=item.id) }}" class="flex items-center gap-2 mt-4">
+      <input type="text" name="tags" value="{{ tags|join(', ') }}" placeholder="Add tags: news, tech" class="input input-bordered input-sm w-full max-w-xs" />
+      <button type="submit" class="btn btn-sm btn-primary">Save Tags</button>
+    </form>
+    {% endif %}
   </div>
-  <article id="full-text" class="prose prose-base sm:prose-lg dark:prose-invert max-w-none bg-white dark:bg-gray-800 p-4 rounded shadow">
-    {% for para in paragraphs %}
-      {% if para.strip() %}
-        <p>{{ para | e }}</p>
-      {% endif %}
-    {% else %}
-      <p class="text-gray-500"><em>No article text available.</em></p>
-    {% endfor %}
-  </article>
+
+  <!-- Article Text & Metadata -->
+  <div class="space-y-4">
+    <div class="collapse collapse-arrow bg-base-200">
+      <input type="checkbox" /> 
+      <div class="collapse-title text-xl font-medium">
+        Full Article Text
+      </div>
+      <div class="collapse-content">
+        <article class="prose max-w-none p-4">
+          {% for para in paragraphs %}{% if para.strip() %}<p>{{ para | e }}</p>{% endif %}{% else %}<p><em>No article text available.</em></p>{% endfor %}
+        </article>
+      </div>
+    </div>
+
+    <div class="collapse collapse-arrow bg-base-200">
+      <input type="checkbox" /> 
+      <div class="collapse-title text-xl font-medium">
+        Metadata
+      </div>
+      <div class="collapse-content">
+        <ul class="menu p-4 w-full">
+          <li><strong>Original URL:</strong> <a href="{{ item.url }}" target="_blank" class="link link-hover break-all">{{ item.url }}</a></li>
+          <li><strong>Status:</strong> <span class="badge badge-ghost">{{ item.status|capitalize or '—' }}</span></li>
+          <li><strong>Last Modified:</strong> {{ item.last_modified or "–" }}</li>
+          <li><strong>ETag:</strong> {{ item.etag or "–" }}</li>
+          {% if item.domain %}<li><strong>Domain:</strong> {{ item.domain }}</li>{% endif %}
+          {% if item.publisher %}<li><strong>Publisher:</strong> {{ item.publisher }}</li>{% endif %}
+          {% if item.storage_bytes %}<li><strong>Size:</strong> {{ (item.storage_bytes // 1024) }} KB</li>{% endif %}
+          {% if item.submitted_at_fmt %}<li><strong>Submitted at:</strong> {{ item.submitted_at_fmt }}</li>{% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
+  <script src="{{ url_for('static', filename='js/detail.js', v=build_id) }}"></script>
   <script>
-    // Animate the copy link button
     document.addEventListener('DOMContentLoaded', () => {
       const btn = document.getElementById('copy-link-btn');
       if (btn) {
         btn.addEventListener('click', () => {
           navigator.clipboard.writeText(window.location.href);
           btn.textContent = 'Copied!';
-          btn.classList.add('bg-green-600');
           setTimeout(() => {
             btn.textContent = 'Copy Link';
-            btn.classList.remove('bg-green-600');
           }, 2000);
         });
       }

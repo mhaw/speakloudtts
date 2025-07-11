@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Error{% endblock %}
+
+{% block content %}
+<div class="text-center py-12">
+  <h1 class="text-4xl font-bold text-error mb-4">Oops! An Error Occurred</h1>
+  <p class="text-lg mb-2">We encountered an unexpected problem.</p>
+  {% if error_message %}
+    <p class="text-base-content/70 mb-6"><strong>Details:</strong> {{ error_message }}</p>
+  {% endif %}
+  <a href="{{ url_for('home') }}" class="btn btn-primary">Go Back Home</a>
+</div>
+{% endblock %}
