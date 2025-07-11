@@ -64,4 +64,4 @@ ENV PORT=8080 \
     PYTHONUNBUFFERED=1 \
     BUILD_ID_FILE=/app/BUILD_INFO
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "main:app"]
