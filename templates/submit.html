@@ -7,7 +7,7 @@
     <p class="text-base-content/70 mt-2">Paste a link to any article. We'll convert it to high-quality audio in seconds.</p>
   </div>
   
-  <form id="submit-form" method="post" class="space-y-4">
+  <form id="submit-form" method="post" class="space-y-4 p-8 bg-base-100 rounded-lg shadow-md">
     
     <div class="form-control w-full">
       <label class="label" for="url-input">
@@ -20,17 +20,17 @@
         required 
         autofocus 
         placeholder="https://example.com/path/to/article" 
-        class="input input-bordered w-full" />
+        class="input input-bordered w-full transition-all duration-300 focus:ring-2 focus:ring-primary" />
     </div>
 
     <div class="form-control w-full">
       <label class="label" for="voice-select">
         <span class="label-text">Choose Voice</span>
       </label>
-      <select id="voice-select" name="voice" class="select select-bordered">
-        {% for v_id in voices %}
-          <option value="{{ v_id }}" {% if v_id == default_voice %}selected{% endif %}>
-            {{ v_id.replace('-', ' ').replace('_', ' ') | title }}
+      <select id="voice-select" name="voice" class="select select-bordered transition-all duration-300 focus:ring-2 focus:ring-primary">
+        {% for voice in voices %}
+          <option value="{{ voice.code }}" {% if voice.code == default_voice %}selected{% endif %}>
+            {{ voice.name }}
           </option>
         {% endfor %}
       </select>
@@ -45,17 +45,28 @@
         id="tags-input" 
         name="tags" 
         placeholder="news, tech, interesting" 
-        class="input input-bordered w-full" />
+        class="input input-bordered w-full transition-all duration-300 focus:ring-2 focus:ring-primary" />
     </div>
 
     <div class="pt-4">
-      <button type="submit" id="submit-btn" class="btn btn-primary w-full">
+      <button type="submit" id="submit-btn" class="btn btn-primary btn-block text-lg h-14">
         Convert to Audio
       </button>
     </div>
     
     <div id="status" class="min-h-[2em] text-center text-sm py-2"></div>
   </form>
+
+  <div class="divider my-8">Or Use Our Bookmarklet</div>
+
+  <div class="text-center p-6 bg-base-200 rounded-lg shadow-inner">
+    <p class="mb-4">Drag this button to your bookmarks bar for one-click saving:</p>
+    <a href="javascript:((url) => { const dest = new URL('{{ request.url_root }}add'); dest.searchParams.set('url', url); window.open(dest.toString(), '_blank'); })(location.href);"
+       class="btn btn-accent inline-block cursor-move"
+       title="Drag me to your bookmarks bar!">
+      Send to SpeakLoud
+    </a>
+  </div>
 
   <div class="text-xs text-base-content/50 text-center mt-8">
     Trouble? Try a different URL or <a href="/errors" class="link">check error logs</a>.

@@ -3,6 +3,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const adminTable = document.getElementById('admin-table');
   if (!adminTable) return;
 
+  // --- Toast Notifications ---
+  const toastContainer = document.getElementById('toast-container');
+  function showToast(message, isError = false) {
+    if (!toastContainer) return;
+    const toast = document.createElement('div');
+    const baseClasses = 'px-4 py-3 rounded-md shadow-lg text-white text-sm transition-all duration-300';
+    const a11y = 'role="alert" aria-live="assertive"';
+    toast.className = `${baseClasses} ${isError ? 'bg-red-600' : 'bg-green-600'}`;
+    toast.innerHTML = `<span ${a11y}>${message}</span>`;
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(20px)';
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
   // --- Bulk selection ---
   const selectAllChk = document.getElementById('select-all');
   const itemChks = () => adminTable.querySelectorAll('.select-item');
@@ -19,9 +36,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const count = selectedIds().length;
     document.getElementById('selected-count').textContent = count ? `${count} selected` : '';
     document.getElementById('apply-bulk').disabled = !count;
-    // If not all selected, uncheck selectAll, else check
     const chks = itemChks();
-    selectAllChk.checked = chks.length && Array.from(chks).every(cb => cb.checked);
+    if (chks.length > 0) {
+      selectAllChk.checked = chks.length === selectedIds().length;
+    }
+  }
+
+  // --- Action Feedback ---
+  function setBulkActionWorking(working) {
+    document.getElementById('apply-bulk').disabled = working;
+    document.getElementById('bulk-action').disabled = working;
+    document.getElementById('retry-stuck')?.toggleAttribute('disabled', working);
+  }
+
+  function setRowWorking(row, working) {
+    if (!row) return;
+    row.classList.toggle('opacity-50', working);
+    row.classList.toggle('pointer-events-none', working);
+    // Add a spinner or something more visual if you want
   }
 
   // --- Bulk Actions ---
@@ -31,92 +63,81 @@ document.addEventListener('DOMContentLoaded', () => {
     const ids = selectedIds();
     if (!action || !ids.length) return;
     if (!confirm(`Are you sure you want to ${action} ${ids.length} item(s)?`)) return;
-    setActionWorking(true);
+    
+    setBulkActionWorking(true);
     try {
       const res = await fetch(`/admin/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ids })
       });
-      if (!res.ok) throw new Error(await res.text());
-      alert(`Bulk ${action} applied to ${ids.length} item(s).`);
-      window.location.reload();
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error?.message || 'Unknown error occurred.');
+      }
+      showToast(`Bulk action '${action}' applied successfully.`);
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
-      alert(`Bulk action failed: ${err}`);
+      showToast(`Bulk action failed: ${err.message}`, true);
     } finally {
-      setActionWorking(false);
+      setBulkActionWorking(false);
     }
   });
-
-  function setActionWorking(working) {
-    document.getElementById('apply-bulk').disabled = working;
-    document.getElementById('bulk-action').disabled = working;
-    adminTable.querySelectorAll('button, input[type="checkbox"]').forEach(el => el.disabled = working);
-  }
 
   // --- Retry All Stuck ---
   document.getElementById('retry-stuck')?.addEventListener('click', async () => {
     if (!confirm("Retry all stuck items?")) return;
+    setBulkActionWorking(true);
     try {
       const res = await fetch(`/admin/retry-stuck`, { method: 'POST' });
-      if (!res.ok) throw new Error(await res.text());
-      alert('Retry enqueued for all stuck items.');
-      window.location.reload();
+      const resData = await res.json();
+      if (!res.ok || !resData.success) throw new Error(resData.error?.message || 'Unknown error');
+      showToast(resData.message || 'Retry enqueued for all stuck items.');
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
-      alert(`Retry all failed: ${err}`);
+      showToast(`Retry all failed: ${err.message}`, true);
+    } finally {
+      setBulkActionWorking(false);
     }
   });
 
   // --- Per-row actions ---
-  adminTable.addEventListener('click', async (e) => {
-    if (e.target.matches('.reprocess-btn')) {
-      e.preventDefault();
-      const id = e.target.dataset.id;
-      if (!confirm(`Reprocess item ${id}?`)) return;
-      try {
-        e.target.disabled = true;
-        const res = await fetch(`/admin/reprocess/${id}`, { method: 'POST' });
-        if (!res.ok) throw new Error(await res.text());
-        alert('Reprocess triggered.');
-        window.location.reload();
-      } catch (err) {
-        alert('Reprocess failed: ' + err);
-      } finally {
-        e.target.disabled = false;
-      }
+  async function handleRowAction(e) {
+    const button = e.target.closest('.reprocess-btn, .delete-btn, .retry-btn');
+    if (!button) return;
+
+    e.preventDefault();
+    const id = button.dataset.id;
+    const row = button.closest('tr');
+    let actionName = 'unknown';
+    let endpoint = '';
+
+    if (button.matches('.reprocess-btn')) {
+      actionName = 'reprocess';
+      endpoint = `/admin/reprocess/${id}`;
+    } else if (button.matches('.delete-btn')) {
+      actionName = 'delete';
+      endpoint = `/admin/delete/${id}`;
+    } else if (button.matches('.retry-btn')) {
+      actionName = 'retry';
+      endpoint = `/admin/retry/${id}`;
     }
-    if (e.target.matches('.delete-btn')) {
-      e.preventDefault();
-      const id = e.target.dataset.id;
-      if (!confirm(`Delete item ${id}? This cannot be undone.`)) return;
-      try {
-        e.target.disabled = true;
-        const res = await fetch(`/admin/delete/${id}`, { method: 'POST' });
-        if (!res.ok) throw new Error(await res.text());
-        alert('Delete triggered.');
-        window.location.reload();
-      } catch (err) {
-        alert('Delete failed: ' + err);
-      } finally {
-        e.target.disabled = false;
-      }
+
+    if (!confirm(`Are you sure you want to ${actionName} item ${id}?`)) return;
+
+    setRowWorking(row, true);
+    try {
+      const res = await fetch(endpoint, { method: 'POST' });
+      const resData = await res.json();
+      if (!res.ok || !resData.success) throw new Error(resData.error?.message || 'Unknown error');
+      showToast(`${actionName.charAt(0).toUpperCase() + actionName.slice(1)} triggered for ${id}.`);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      showToast(`${actionName} failed: ${err.message}`, true);
+      setRowWorking(row, false); // Only turn it off on failure, as page reloads on success
     }
-    if (e.target.matches('.retry-btn')) {
-      e.preventDefault();
-      const id = e.target.dataset.id;
-      try {
-        e.target.disabled = true;
-        const res = await fetch(`/admin/retry/${id}`, { method: 'POST' });
-        if (!res.ok) throw new Error(await res.text());
-        alert('Retry triggered.');
-        window.location.reload();
-      } catch (err) {
-        alert('Retry failed: ' + err);
-      } finally {
-        e.target.disabled = false;
-      }
-    }
-  });
+  }
+  adminTable.addEventListener('click', handleRowAction);
 
   // --- Pagination ---
   document.getElementById('prev-page')?.addEventListener('click', () => {
@@ -133,10 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location = url;
   }
 
-  // --- Accessibility/Feedback ---
-  // (Add more snackbar/toast notifications or loading overlays here if desired)
-
   // Init
   updateSelectionCount();
   console.log('Admin dashboard JS loaded.');
-})
+});

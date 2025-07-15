@@ -9,33 +9,55 @@
 
   <div class="space-y-4">
     {% for item in items %}
-    <div class="card lg:card-side bg-base-200 shadow-sm">
+    <div class="card lg:card-side bg-base-100 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group border-b border-base-300 last:border-b-0">
       <div class="card-body">
-        <h3 class="card-title">
-          <a href="{{ url_for('main.item_detail', item_id=item['id']) }}" class="link link-hover">
-            {{ item.title or "Untitled Article" }}
-          </a>
-        </h3>
-        <p class="text-sm text-base-content/60">
-          Submitted on {{ item.submitted_at_fmt }}
+        <div class="flex items-center gap-4">
+          {% if item.favicon_url %}
+          <img src="{{ item.favicon_url }}" alt="Favicon for {{ item.domain }}" class="w-6 h-6">
+          {% endif %}
+          <div class="flex-grow">
+            <h3 class="card-title">
+              <a href="{{ url_for('main.item_detail', item_id=item['id']) }}" class="link link-hover group-hover:text-primary transition-colors">
+                {{ item.title or "Untitled Article" }}
+              </a>
+            </h3>
+            <div class="text-sm text-base-content/60 flex items-center gap-2">
+              <span>{{ item.author or 'Unknown Author' }}</span>
+              <span class="text-base-content/40">•</span>
+              <span>{{ item.domain or 'Unknown Source' }}</span>
+            </div>
+          </div>
+        </div>
+        <p class="text-sm text-base-content/60 mt-2">
+          Submitted {{ item.submitted_at_human }}
         </p>
         <div class="card-actions justify-end items-center">
+          {% if item.status == 'failed' %}
+          <a href="{{ url_for('main.item_detail', item_id=item['id']) }}" class="badge badge-error badge-outline transition-colors hover:bg-error hover:text-error-content">
+            {{ item.status | capitalize }}
+          </a>
+          {% else %}
           <div class="badge 
             {% if item.status == 'processed' %}badge-success
-            {% elif item.status == 'failed' %}badge-error
             {% else %}badge-ghost
             {% endif %}
             badge-outline">
             {{ item.status | capitalize }}
           </div>
-          <a href="{{ url_for('main.item_detail', item_id=item['id']) }}" class="btn btn-sm btn-ghost">
+          {% endif %}
+          <a href="{{ url_for('main.item_detail', item_id=item['id']) }}" class="btn btn-sm btn-ghost" aria-label="View details for {{ item.title or 'Untitled Article' }}">
             View Details
           </a>
         </div>
       </div>
     </div>
     {% else %}
-    <div class="text-center py-12">
+    <div class="text-center py-16 bg-base-100 rounded-lg shadow-sm">
+      <div class="w-16 h-16 mx-auto bg-base-200 rounded-full flex items-center justify-center mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      </div>
       <p class="text-lg text-base-content/70">No articles have been submitted yet.</p>
       <a href="/submit" class="btn btn-primary mt-4">Submit the First One</a>
     </div>

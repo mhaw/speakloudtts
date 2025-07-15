@@ -2,9 +2,9 @@
 {% block title %}Admin Dashboard{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto py-10 px-4">
-  <h1 class="text-2xl font-bold mb-6">Admin Dashboard</h1>
-  <p class="mb-2 text-sm text-gray-600">Total articles: <span class="font-semibold">{{ total_count }}</span></p>
+<div data-theme="admin" class="max-w-7xl mx-auto py-10 px-4 bg-base-100 rounded-box shadow-lg">
+  <h1 class="text-2xl font-bold mb-6 text-base-content">Admin Dashboard</h1>
+  <p class="mb-2 text-sm text-base-content/80">Total articles: <span class="font-semibold">{{ total_count }}</span></p>
 
   {% if stuck_items and stuck_items|length > 0 %}
     <div class="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded flex items-center">
@@ -14,83 +14,96 @@
   {% endif %}
 
   <form id="bulk-action-form" class="mb-3 flex flex-wrap gap-2 items-center">
-    <select id="bulk-action" class="border px-2 py-1 rounded text-sm">
+    <select id="bulk-action" class="select select-bordered select-sm">
       <option value="">Bulk Action</option>
+      <option value="publish">Publish</option>
+      <option value="unpublish">Unpublish</option>
       <option value="reprocess">Reprocess</option>
       <option value="delete">Delete</option>
     </select>
-    <button type="button" id="apply-bulk" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50" disabled>Apply</button>
-    <span id="selected-count" class="text-sm ml-2 text-gray-600"></span>
+    <button type="button" id="apply-bulk" class="btn btn-sm btn-primary" disabled>Apply</button>
+    <span id="selected-count" class="text-sm ml-2 text-base-content/80"></span>
     <div class="flex-grow"></div>
-    <button id="prev-page"
-      class="px-3 py-1 border rounded bg-white text-gray-700 mr-2 hover:bg-gray-100"
-      {% if page == 1 %}disabled{% endif %}>&larr; Prev</button>
-    <span id="current-page" class="font-semibold">{{ page }}</span>
-    <button id="next-page"
-      class="px-3 py-1 border rounded bg-white text-gray-700 ml-2 hover:bg-gray-100"
-      {% if not next_page %}disabled{% endif %}>Next &rarr;</button>
+    <div class="join">
+      <button id="prev-page" class="join-item btn btn-sm" {% if page == 1 %}disabled{% endif %}>&larr; Prev</button>
+      <button class="join-item btn btn-sm" disabled>Page {{ page }}</button>
+      <button id="next-page" class="join-item btn btn-sm" {% if not next_page %}disabled{% endif %}>Next &rarr;</button>
+    </div>
   </form>
 
   <div class="overflow-x-auto">
-    <table id="admin-table" class="min-w-full text-xs sm:text-sm text-left text-gray-700 border border-gray-300">
-      <thead class="bg-gray-100 border-b sticky top-0 z-10">
+    <table id="admin-table" class="table table-zebra table-xs sm:table-sm w-full">
+      <thead>
         <tr>
-          <th class="px-3 py-2"><input type="checkbox" id="select-all"></th>
-          <th class="px-3 py-2">ID</th>
-          <th class="px-3 py-2">Title</th>
-          <th class="px-3 py-2">Status</th>
-          <th class="px-3 py-2">Voice</th>
-          <th class="px-3 py-2">Published</th>
-          <th class="px-3 py-2">Words</th>
-          <th class="px-3 py-2">IP</th>
-          <th class="px-3 py-2">Submitted</th>
-          <th class="px-3 py-2">Size</th>
-          <th class="px-3 py-2">Actions</th>
+          <th><input type="checkbox" id="select-all" class="checkbox checkbox-primary"></th>
+          <th>ID</th>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Published</th>
+          <th>Voice</th>
+          <th>Publish Date</th>
+          <th>Words</th>
+          <th>IP</th>
+          <th>Submitted</th>
+          <th>Size</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for item in items %}
-        <tr class="border-t hover:bg-gray-50 {% if item.status == 'processing' %}bg-yellow-50{% elif item.status == 'error' or item.status == 'failed' %}bg-red-50{% elif item.status == 'done' %}bg-green-50{% endif %}">
-          <td class="px-3 py-2"><input type="checkbox" class="select-item" value="{{ item.id }}"></td>
-          <td class="px-3 py-2 break-all text-xs">{{ item.id }}</td>
-          <td class="px-3 py-2">
+        <tr class="hover">
+          <td><input type="checkbox" class="select-item checkbox checkbox-primary" value="{{ item.id }}"></td>
+          <td class="break-all text-xs">{{ item.id }}</td>
+          <td>
             <span class="font-medium">{{ item.title or "Untitled" }}</span>
             {% if item.error_message %}
-              <span class="block text-xs text-red-600" title="Error">{{ item.error_message }}</span>
+              <div class="tooltip tooltip-bottom tooltip-error" data-tip="{{ item.error_message }}">
+                <span class="block text-xs text-error/80">Error</span>
+              </div>
             {% endif %}
             {% if item.extract_status %}
-              <span class="block text-xs text-gray-400" title="Extract status">{{ item.extract_status }}</span>
+               <div class="tooltip tooltip-bottom" data-tip="{{ item.extract_status }}">
+                <span class="block text-xs text-base-content/50">Extract Details</span>
+              </div>
             {% endif %}
           </td>
-          <td class="px-3 py-2 font-semibold">
-            <span class="{% if item.status == 'processing' %}text-yellow-700{% elif item.status == 'error' or item.status == 'failed' %}text-red-600{% elif item.status == 'done' %}text-green-700{% else %}text-gray-500{% endif %}">
+          <td class="font-semibold">
+            <span class="{% if item.status == 'processing' %}text-warning{% elif item.status == 'error' or item.status == 'failed' %}text-error{% elif item.status == 'done' %}text-success{% else %}text-base-content/70{% endif %}">
               {{ item.status or "—" }}
             </span>
           </td>
-          <td class="px-3 py-2">{{ item.voice or "—" }}</td>
-          <td class="px-3 py-2">{{ item.publish_date_fmt or "N/A" }}</td>
-          <td class="px-3 py-2">{{ item.word_count or "—" }}</td>
-          <td class="px-3 py-2">{{ item.submitted_ip or "—" }}</td>
-          <td class="px-3 py-2">{{ item.submitted_at_fmt or "—" }}</td>
-          <td class="px-3 py-2">{{ item.storage_bytes or "—" }}</td>
-          <td class="px-3 py-2 flex flex-wrap gap-1">
-            <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="text-blue-600 hover:underline">View</a>
-            <button type="button" class="reprocess-btn text-xs text-yellow-700 hover:underline" data-id="{{ item.id }}">Reprocess</button>
-            <button type="button" class="delete-btn text-xs text-red-600 hover:underline" data-id="{{ item.id }}">Delete</button>
+          <td>
+            {% if item.published %}
+              <span class="font-semibold text-success">Yes</span>
+            {% else %}
+              <span class="text-base-content/70">No</span>
+            {% endif %}
+          </td>
+          <td>{{ item.voice or "—" }}</td>
+          <td>{{ item.publish_date_fmt or "N/A" }}</td>
+          <td>{{ item.word_count or "—" }}</td>
+          <td>{{ item.submitted_ip or "—" }}</td>
+          <td>{{ item.submitted_at_fmt or "���" }}</td>
+          <td>{{ item.storage_bytes or "—" }}</td>
+          <td class="flex flex-wrap gap-1">
+            <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="btn btn-xs btn-ghost">View</a>
+            <button type="button" class="reprocess-btn btn btn-xs btn-ghost text-warning" data-id="{{ item.id }}">Reprocess</button>
+            <button type="button" class="delete-btn btn btn-xs btn-ghost text-error" data-id="{{ item.id }}">Delete</button>
             {% if item.status == 'error' or item.status == 'processing' %}
-              <button type="button" class="retry-btn text-xs text-orange-600 hover:underline" data-id="{{ item.id }}">Retry</button>
+              <button type="button" class="retry-btn btn btn-xs btn-ghost text-accent" data-id="{{ item.id }}">Retry</button>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
         {% if not items %}
         <tr>
-          <td colspan="11" class="px-4 py-4 text-center text-gray-500">No articles found.</td>
+          <td colspan="12" class="text-center py-4">No articles found.</td>
         </tr>
         {% endif %}
       </tbody>
     </table>
   </div>
+  <div id="toast-container" class="toast toast-bottom toast-end"></div>
 </div>
 <script src="{{ url_for('static', filename='js/admin.js', v=build_id) }}"></script>
 {% endblock %}

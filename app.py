@@ -3,11 +3,12 @@ import json
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 import time
+import humanize
 
-from flask import (
+from flask (
     Flask, request, jsonify, render_template, redirect, url_for, flash, Response, Blueprint, current_app
 )
-from flask_login import (
+from flask_login (
     LoginManager, login_user, logout_user, login_required, current_user
 )
 from flask_talisman import Talisman
@@ -21,6 +22,7 @@ from gcp import db, storage_client, bucket, create_processing_task
 from your_user_module import User
 from processing import process_article_submission
 from rss import generate_feed
+from logging_config import setup_logging
 
 # --- Blueprints ---
 main_bp = Blueprint('main', __name__)
@@ -37,6 +39,15 @@ def load_user(user_id):
     return User.get(user_id)
 
 # --- Helpers & Decorators ---
+def _get_log_extra():
+    """Helper to assemble extra data for logging."""
+    extra = {
+        "user_id": current_user.id if current_user.is_authenticated else "anonymous",
+        "remote_addr": request.remote_addr,
+        "url": request.url,
+    }
+    return extra
+
 def _doc_to_dict(doc):
     if not doc.exists:
         return None
@@ -44,11 +55,17 @@ def _doc_to_dict(doc):
     d["id"] = doc.id
     submitted_at = d.get("submitted_at")
     if hasattr(submitted_at, "to_datetime"):
-        d["submitted_at_fmt"] = submitted_at.to_datetime().strftime("%Y-%m-%d %H:%M")
+        dt_submitted = submitted_at.to_datetime()
+        d["submitted_at_fmt"] = dt_submitted.strftime("%Y-%m-%d %H:%M")
+        d["submitted_at_human"] = humanize.naturaltime(datetime.now(timezone.utc) - dt_submitted)
     elif isinstance(submitted_at, datetime):
         d["submitted_at_fmt"] = submitted_at.strftime("%Y-%m-%d %H:%M")
+        d["submitted_at_human"] = humanize.naturaltime(datetime.now(timezone.utc) - submitted_at)
     else:
         d["submitted_at_fmt"] = "—"
+        d["submitted_at_human"] = "some time ago"
+
+    d["published"] = d.get("published", False)
     publish_date = d.get("publish_date")
     if isinstance(publish_date, datetime):
         d["publish_date_fmt"] = publish_date.strftime("%Y-%m-%d")
@@ -65,7 +82,7 @@ def api_success(data=None, message="", code=200):
     return jsonify(response), code
 
 def api_error(message, code=400):
-    logging.error(f"API Error ({code}): {message}")
+    current_app.logger.error(f"API Error ({code}): {message}", extra=_get_log_extra())
     return jsonify({"success": False, "error": {"message": message}}), code
 
 def _generate_signed_url(blob_name):
@@ -79,7 +96,7 @@ def _generate_signed_url(blob_name):
             method="GET"
         )
     except Exception as e:
-        logging.error(f"Error generating signed URL for {blob_name}: {e}", exc_info=True)
+        current_app.logger.error(f"Error generating signed URL for {blob_name}: {e}", exc_info=True, extra=_get_log_extra())
         return None
 
 def admin_required(f):
@@ -132,18 +149,18 @@ def login():
         user = User.authenticate(username, password)
         if user:
             login_user(user)
-            logging.info(f"User {user.id} logged in successfully.")
+            current_app.logger.info(f"User {user.id} logged in successfully.", extra=_get_log_extra())
             flash("Login successful.", "success")
             return redirect(request.args.get("next") or url_for("main.submit_url"))
         else:
-            logging.warning(f"Failed login attempt for username: {username}")
+            current_app.logger.warning(f"Failed login attempt for username: {username}", extra=_get_log_extra())
             flash("Invalid login.", "error")
     return render_template("login.html")
 
 @main_bp.route("/logout")
 @login_required
 def logout():
-    logging.info(f"User {current_user.id} logged out.")
+    current_app.logger.info(f"User {current_user.id} logged out.", extra=_get_log_extra())
     logout_user()
     flash("You have been successfully logged out.", "success")
     return redirect(url_for("main.home"))
@@ -177,10 +194,10 @@ def submit_url():
             "submitted_ip": request.remote_addr
         })
         
-        logging.info(f"New article submitted by {current_user.id}: {url}")
+        current_app.logger.info(f"New article submitted: {url}", extra=_get_log_extra())
 
         if not create_processing_task(item_id):
-            logging.warning(f"Task creation failed for {item_id}. Falling back to synchronous processing.")
+            current_app.logger.warning(f"Task creation failed for {item_id}. Falling back to synchronous processing.", extra=_get_log_extra())
             process_article_submission(doc_ref, url, voice)
             
         return api_success(
@@ -188,11 +205,49 @@ def submit_url():
             message="Your article has been successfully submitted!"
         )
     except Exception as e:
-        logging.error(f"Error in submit_url: {e}", exc_info=True)
-        doc_ref.update({"status": "error", "error_message": str(e)})
-        return api_error(str(e), 500)
+        current_app.logger.error(f"Error submitting URL: {e}", exc_info=True, extra=_get_log_extra())
+        flash("An error occurred while processing the article.", "error")
+    return redirect(url_for('main.home'))
 
-@main_bp.route("/items")
+
+@main_bp.route('/add')
+@login_required
+def add_article():
+    """Add an article from a URL query parameter (for bookmarklet)."""
+    url = request.args.get('url')
+    if not url:
+        flash("URL is required.", "error")
+        return redirect(url_for('main.home'))
+
+    try:
+        # Use the same processing logic as the form submission
+        doc_ref = db.collection("items").document()
+        item_id = doc_ref.id
+        
+        doc_ref.set({
+            "id": item_id, "user_id": current_user.id, "url": url,
+            "title": "Pending Extraction...", "status": "queued", 
+            "voice": current_app.config["DEFAULT_VOICE"], "tags": ["bookmarklet"],
+            "submitted_at": datetime.now(timezone.utc),
+            "submitted_ip": request.remote_addr
+        })
+        
+        current_app.logger.info(f"New article from bookmarklet: {url}", extra=_get_log_extra())
+
+        if not create_processing_task(item_id):
+            current_app.logger.warning(f"Task creation failed for {item_id}. Falling back to sync.", extra=_get_log_extra())
+            process_article_submission(doc_ref, url, current_app.config["DEFAULT_VOICE"])
+
+        flash("Article added successfully!", "success")
+        return redirect(url_for('main.item_detail', item_id=item_id))
+        
+    except Exception as e:
+        current_app.logger.error(f"Error adding article via bookmarklet: {e}", exc_info=True, extra=_get_log_extra())
+        flash("An error occurred while processing the article.", "error")
+        return redirect(url_for('main.home'))
+
+
+@main_bp.route('/items')
 @login_required
 def list_items():
     items_ref = db.collection("items").where("user_id", "==", current_user.id).order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(50)
@@ -208,12 +263,14 @@ def item_detail(item_id, doc_ref, doc):
     if gcs_path := item.get("gcs_path"):
         item["audio_url"] = _generate_signed_url(gcs_path)
     
-    full_text = item.get('text', '')
-    paragraphs = [p.strip() for p in full_text.split('\n\n') if p.strip()]
-    return render_template("item_detail.html", item=item, paragraphs=paragraphs)
+    structured_text = item.get('structured_text', [])
+    if not structured_text and (text := item.get('text', '')):
+        # Fallback for older items without structured_text
+        structured_text = [{"type": "p", "text": p.strip()} for p in text.split('\n') if p.strip()]
+
+    return render_template("item_detail.html", item=item, structured_text=structured_text)
 
 @main_bp.route("/feed.xml")
-@login_required
 def podcast_feed():
     app_config = {"APP_URL_ROOT": request.url_root, "GCS_BUCKET_NAME": current_app.config["GCS_BUCKET_NAME"]}
     feed_xml = generate_feed(db, storage_client, app_config)
@@ -229,7 +286,7 @@ def update_tags(item_id, doc_ref, doc):
         doc_ref.update({"tags": tags})
         flash("Tags updated.", "success")
     except Exception as e:
-        logging.error(f"Error updating tags for item {item_id}: {e}", exc_info=True)
+        current_app.logger.error(f"Error updating tags for item {item_id}: {e}", exc_info=True, extra=_get_log_extra())
         flash("Failed to update tags.", "error")
     return redirect(url_for("main.item_detail", item_id=item_id))
 
@@ -263,10 +320,10 @@ def dashboard():
             item["extract_status"] = item.get("extract_status", None)
 
     except FailedPrecondition as e:
-        logging.error(f"Firestore index missing or permission error in admin_dashboard: {e}", exc_info=True)
+        current_app.logger.error(f"Firestore index missing or permission error in admin_dashboard: {e}", exc_info=True, extra=_get_log_extra())
         flash(f"Database query failed, likely due to a missing Firestore index. Please check the application logs for an index creation link. Error: {e}", "error")
     except Exception as e:
-        logging.error(f"Error fetching admin dashboard data: {e}", exc_info=True)
+        current_app.logger.error(f"Error fetching admin dashboard data: {e}", exc_info=True, extra=_get_log_extra())
         flash("Error fetching articles. Please try again later.", "error")
 
     prev_page = page - 1 if page > 1 else None
@@ -285,21 +342,21 @@ def dashboard():
 @admin_required
 @get_item_or_abort
 def reprocess_item(item_id, doc_ref, doc):
-    logging.info(f"Admin {current_user.id} triggered reprocess for item: {item_id}")
+    current_app.logger.info(f"Admin triggered reprocess for item: {item_id}", extra=_get_log_extra())
     try:
         item = doc.to_dict()
         url = item.get("url")
         voice = item.get("voice", current_app.config["DEFAULT_VOICE"])
-        doc_ref.update({"status": "reprocessing", "error_message": None})
+        doc_ref.update({"status": "reprocessing", "error_message": None, "published": False})
         process_article_submission(doc_ref, url, voice)
         return api_success(message=f"Item {item_id} is being reprocessed.")
     except Exception as e:
         error_message = f"Reprocess failed for item {item_id}: {e}"
-        logging.error(error_message, exc_info=True)
+        current_app.logger.error(error_message, exc_info=True, extra=_get_log_extra())
         try:
             doc_ref.update({"status": "error", "error_message": str(e)})
         except Exception as update_err:
-            logging.error(f"Error updating doc after reprocess failure: {update_err}")
+            current_app.logger.error(f"Error updating doc after reprocess failure: {update_err}", extra=_get_log_extra())
         return api_error(str(e), 500)
 
 @admin_bp.route("/delete/<item_id>", methods=["POST"])
@@ -307,22 +364,22 @@ def reprocess_item(item_id, doc_ref, doc):
 @admin_required
 @get_item_or_abort
 def delete_item(item_id, doc_ref, doc):
-    logging.info(f"Admin {current_user.id} triggered delete for item: {item_id}")
+    current_app.logger.info(f"Admin triggered delete for item: {item_id}", extra=_get_log_extra())
     try:
         gcs_path = doc.to_dict().get("gcs_path")
         if gcs_path:
             blob = bucket.blob(gcs_path)
             if blob.exists():
                 blob.delete()
-                logging.info(f"Deleted GCS file: {gcs_path}")
+                current_app.logger.info(f"Deleted GCS file: {gcs_path}", extra=_get_log_extra())
 
         doc_ref.delete()
-        logging.info(f"Deleted Firestore document: {item_id}")
+        current_app.logger.info(f"Deleted Firestore document: {item_id}", extra=_get_log_extra())
         
         return api_success(message=f"Item {item_id} and associated file deleted.")
     except Exception as e:
         error_message = f"Delete failed for item {item_id}: {e}"
-        logging.error(error_message, exc_info=True)
+        current_app.logger.error(error_message, exc_info=True, extra=_get_log_extra())
         return api_error(str(e), 500)
 
 @admin_bp.route("/retry/<item_id>", methods=["POST"])
@@ -343,7 +400,7 @@ def bulk_action():
     if not action or not ids:
         return api_error("Missing 'action' or 'ids' in request.", 400)
 
-    logging.info(f"Admin {current_user.id} triggered bulk action '{action}' for items: {', '.join(ids)}")
+    current_app.logger.info(f"Admin triggered bulk action '{action}' for items: {', '.join(ids)}", extra=_get_log_extra())
     results = {}
     for item_id in ids:
         try:
@@ -365,14 +422,26 @@ def bulk_action():
                 item = doc.to_dict()
                 url = item.get("url")
                 voice = item.get("voice", current_app.config["DEFAULT_VOICE"])
-                doc_ref.update({"status": "reprocessing", "error_message": None})
+                doc_ref.update({"status": "reprocessing", "error_message": None, "published": False})
                 process_article_submission(doc_ref, url, voice)
+                results[item_id] = "Success"
+            elif action == "publish":
+                if doc.to_dict().get("status") == "done":
+                    update_data = {"published": True}
+                    if not doc.to_dict().get("publish_date"):
+                        update_data["publish_date"] = datetime.now(timezone.utc)
+                    doc_ref.update(update_data)
+                    results[item_id] = "Success"
+                else:
+                    results[item_id] = "Failed: Not 'done'"
+            elif action == "unpublish":
+                doc_ref.update({"published": False})
                 results[item_id] = "Success"
             else:
                 return api_error(f"Unknown bulk action: {action}", 400)
         except Exception as e:
             results[item_id] = f"Failed: {str(e)}"
-            logging.error(f"Bulk action '{action}' failed for item {item_id}: {e}", exc_info=True)
+            current_app.logger.error(f"Bulk action '{action}' failed for item {item_id}: {e}", exc_info=True, extra=_get_log_extra())
             
     return api_success(data={"results": results})
 
@@ -391,7 +460,7 @@ def retry_stuck_items():
             item_id = item_doc.id
             doc_ref = item_doc.reference
             item = item_doc.to_dict()
-            logging.info(f"Retrying stuck item: {item_id}")
+            current_app.logger.info(f"Retrying stuck item: {item_id}", extra=_get_log_extra())
             
             try:
                 url = item.get("url")
@@ -400,11 +469,11 @@ def retry_stuck_items():
                 process_article_submission(doc_ref, url, voice)
                 count += 1
             except Exception as e:
-                logging.error(f"Failed to retry item {item_id} during stuck-item-retry: {e}", exc_info=True)
+                current_app.logger.error(f"Failed to retry item {item_id} during stuck-item-retry: {e}", exc_info=True, extra=_get_log_extra())
 
         return api_success(message=f"Attempted to retry {count} stuck item(s).")
     except Exception as e:
-        logging.error(f"Failed to query for stuck items: {e}", exc_info=True)
+        current_app.logger.error(f"Failed to query for stuck items: {e}", exc_info=True, extra=_get_log_extra())
         return api_error(str(e), 500)
 
 @admin_bp.route("/failed-articles")
@@ -416,11 +485,11 @@ def failed_articles():
         errors = [_doc_to_dict(doc) for doc in items_ref.stream()]
         return render_template("failed_articles.html", errors=errors)
     except FailedPrecondition as e:
-        logging.error(f"Firestore index missing or permission error in failed_articles: {e}", exc_info=True)
+        current_app.logger.error(f"Firestore index missing or permission error in failed_articles: {e}", exc_info=True, extra=_get_log_extra())
         flash(f"Database query failed, likely due to a missing Firestore index. Please check the application logs for an index creation link. Error: {e}", "error")
         return redirect(url_for("admin.dashboard"))
     except Exception as e:
-        logging.error(f"Error fetching failed articles: {e}", exc_info=True)
+        current_app.logger.error(f"Error fetching failed articles: {e}", exc_info=True, extra=_get_log_extra())
         flash("Could not fetch failed articles.", "error")
         return redirect(url_for("admin.dashboard"))
 
@@ -429,28 +498,35 @@ def failed_articles():
 def task_handler():
     start = time.time()
     data = request.get_json()
+    
+    log_extra = {"remote_addr": request.remote_addr, "url": request.url}
+
     if not data or not (item_id := data.get("item_id")):
+        current_app.logger.error("Task handler called without item_id.", extra=log_extra)
         return api_error("item_id is required", 400)
     
+    log_extra["item_id"] = item_id
     doc_ref = db.collection("items").document(item_id)
     doc = doc_ref.get()
     if not doc.exists:
-        logging.warning(f"Task handler received non-existent item_id: {item_id}. Task will be acknowledged.")
+        current_app.logger.warning(f"Task handler received non-existent item_id: {item_id}. Task will be acknowledged.", extra=log_extra)
         return api_success(message=f"Item {item_id} not found, task acknowledged.", code=200)
 
     item = doc.to_dict()
+    log_extra["user_id"] = item.get("user_id", "unknown")
+
     try:
-        logging.info(f"Started processing item {item_id}.")
+        current_app.logger.info(f"Started processing item {item_id}.", extra=log_extra)
         doc_ref.update({"status": "processing"})
         process_article_submission(doc_ref, item.get("url"), item.get("voice", current_app.config["DEFAULT_VOICE"]))
         elapsed = time.time() - start
-        logging.info(f"Successfully processed item {item_id} in {elapsed:.2f} seconds.")
+        current_app.logger.info(f"Successfully processed item {item_id} in {elapsed:.2f} seconds.", extra=log_extra)
         return api_success(message=f"Successfully processed item {item_id}.")
     except Exception as e:
-        logging.error(f"Task handler failed for item {item_id}: {e}", exc_info=True)
+        current_app.logger.error(f"Task handler failed for item {item_id}: {e}", exc_info=True, extra=log_extra)
         doc_ref.update({"status": "error", "error_message": str(e)})
         elapsed = time.time() - start
-        logging.info(f"Processing failed for item {item_id} after {elapsed:.2f} seconds.")
+        current_app.logger.info(f"Processing failed for item {item_id} after {elapsed:.2f} seconds.", extra=log_extra)
         return api_error(str(e), 500)
 
 def create_app():
@@ -458,7 +534,7 @@ def create_app():
     app.config.from_object(config)
     
     # --- Logging ---
-    logging.basicConfig(level=app.config["LOG_LEVEL"], format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s")
+    setup_logging(app)
 
     # --- Security ---
     if not app.config["DEBUG"]:

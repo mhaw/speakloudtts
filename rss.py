@@ -59,20 +59,16 @@ def generate_feed(db_client, storage_client, app_config: dict) -> str:
     # Fetch 'done' items from Firestore, ordered by publish_date
     logger.info("RSS: Fetching 'done' items from Firestore for feed.")
     try:
-        docs_query = db_client.collection("items") \
-            .where("status", "==", "done") \
-            .where("gcs_path", "!=", None) \
-            .order_by("publish_date", direction="DESCENDING") \
-            .limit(100)
+        docs_query = db_client.collection("items")             .where("status", "==", "done")             .where("gcs_path", "!=", None)             .order_by("publish_date", direction="DESCENDING")             .limit(100)
         docs = list(docs_query.stream())
     except Exception as e:
         logger.warning(f"RSS: Query with 'publish_date' failed: {e}. Falling back to 'submitted_at'.")
-        docs_query = db_client.collection("items") \
-            .where("status", "==", "done") \
-            .where("gcs_path", "!=", None) \
-            .order_by("submitted_at", direction="DESCENDING") \
-            .limit(100)
-        docs = list(docs_query.stream())
+        try:
+            docs_query = db_client.collection("items")                 .where("status", "==", "done")                 .where("gcs_path", "!=", None)                 .order_by("submitted_at", direction="DESCENDING")                 .limit(100)
+            docs = list(docs_query.stream())
+        except Exception as e_fallback:
+            logger.error(f"RSS: Fallback query also failed: {e_fallback}", exc_info=True)
+            docs = []
 
     items_for_feed = []
     raw_items_count = 0

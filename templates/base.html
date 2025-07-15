@@ -31,10 +31,10 @@
     <a href="#main-content" class="sr-only focus:not-sr-only absolute left-2 top-2 z-50 bg-primary text-primary-content px-3 py-1 rounded-md shadow-lg">Skip to main content</a>
 
     <!-- Responsive Navbar -->
-    <header class="bg-base-100 shadow-sm sticky top-0 z-30">
+    <header class="bg-base-100/80 backdrop-blur-sm border-b border-base-300 shadow-sm sticky top-0 z-30">
         <div class="navbar container mx-auto px-4">
             <div class="navbar-start">
-                <a href="/" class="btn btn-ghost text-xl font-bold">
+                <a href="/" class="btn btn-ghost text-xl font-bold transition-transform hover:scale-105">
                     <span role="img" aria-label="mic">🎤</span>
                     SpeakLoud
                 </a>
@@ -43,11 +43,11 @@
                 <!-- Desktop Menu -->
                 <div class="hidden md:flex">
                     <ul class="menu menu-horizontal px-1 space-x-1">
-                        <li><a href="/submit" class="btn btn-ghost {% if request.path=='/submit' %}btn-active{% endif %}">Submit</a></li>
-                        <li><a href="/items" class="btn btn-ghost {% if request.path.startswith('/items') %}btn-active{% endif %}">Articles</a></li>
-                        <li><a href="/feed.xml" class="btn btn-ghost">Feed</a></li>
+                        <li><a href="/submit" class="btn btn-ghost transition-all duration-300 {% if request.path=='/submit' %}btn-active{% endif %}">Submit</a></li>
+                        <li><a href="/items" class="btn btn-ghost transition-all duration-300 {% if request.path.startswith('/items') %}btn-active{% endif %}">Articles</a></li>
+                        <li><a href="/feed.xml" class="btn btn-ghost transition-all duration-300">Feed</a></li>
                         {% if current_user.is_authenticated and current_user.is_admin %}
-                            <li><a href="/admin" class="btn btn-ghost {% if request.path.startswith('/admin') %}btn-active{% endif %}">Admin</a></li>
+                            <li><a href="/admin" class="btn btn-ghost transition-all duration-300 {% if request.path.startswith('/admin') %}btn-active{% endif %}">Admin</a></li>
                         {% endif %}
                         {% if current_user.is_authenticated %}
                             <li class="dropdown dropdown-end">
@@ -88,7 +88,7 @@
         </div>
     </header>
 
-    <main id="main-content" class="container mx-auto px-4 py-8 flex-grow">
+    <main id="main-content" class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="mb-8 space-y-2">
@@ -105,7 +105,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="footer footer-center p-4 bg-base-300 text-base-content mt-auto">
+    <footer class="footer footer-center p-4 bg-base-300/50 text-base-content mt-auto">
         <aside>
             <p>&copy; 2025 SpeakLoudTTS. All rights reserved.</p>
         </aside>

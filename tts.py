@@ -41,13 +41,6 @@ def _get_storage_client_and_bucket():
             raise
     return STORAGE_CLIENT_INSTANCE, GCS_BUCKET_INSTANCE
 
-# ─── Audio Config ───────────────────────────────────────────────
-AUDIO_CONFIG = texttospeech.AudioConfig(
-    audio_encoding=texttospeech.AudioEncoding.MP3,
-    speaking_rate=1.1,
-    # pitch=0, sample_rate_hertz=24000 for better quality, if needed.
-)
-
 def _build_ssml(title: str, author: str, paragraphs: List[str]) -> List[str]:
     """Splits article into SSML chunks < MAX_BYTES bytes for Google TTS."""
     logger.debug(f"Building SSML for '{title}', by '{author}', {len(paragraphs)} paragraphs.")
@@ -86,7 +79,15 @@ def _build_ssml(title: str, author: str, paragraphs: List[str]) -> List[str]:
         logger.warning("No SSML chunks generated; text was empty or too fragmented.")
     return chunks
 
-def synthesize_long_text(title: str, author: str, full_text: str, item_id: str, voice_name: str) -> Dict[str, any]:
+def synthesize_long_text(
+    title: str,
+    author: str,
+    full_text: str,
+    item_id: str,
+    voice_name: str,
+    speaking_rate: float = 1.1,
+    force_overwrite: bool = False
+) -> Dict[str, any]:
     """
     Synthesizes long-form text using Google TTS, uploads MP3 to GCS, returns dict with result.
     """
@@ -96,6 +97,19 @@ def synthesize_long_text(title: str, author: str, full_text: str, item_id: str, 
         _, bucket = _get_storage_client_and_bucket()
     except Exception as e:
         return {"uri": None, "duration_seconds": 0, "error": f"Failed to initialize GCP clients: {str(e)}"}
+
+    output_gcs_filename = f"{item_id}.mp3"
+    blob = bucket.blob(output_gcs_filename)
+
+    if not force_overwrite and blob.exists():
+        logger.info(f"TTS: File {output_gcs_filename} already exists in GCS and force_overwrite is False. Skipping synthesis.")
+        return {
+            "gcs_path": output_gcs_filename,
+            "duration_seconds": 0,  # Duration is unknown without probing, which we skip.
+            "gcs_bucket": GCS_BUCKET,
+            "num_segments": 0,
+            "error": "skipped_existing_file"
+        }
 
     paras = [p.strip() for p in full_text.split('\n') if p.strip()]
     if not paras and not title and not author:
@@ -107,8 +121,14 @@ def synthesize_long_text(title: str, author: str, full_text: str, item_id: str, 
         logger.warning(f"TTS: No SSML for item {item_id}. Aborting.")
         return {"uri": None, "duration_seconds": 0, "error": "SSML generation resulted in no chunks."}
 
+    total_chars = sum(len(chunk) for chunk in ssml_chunks)
+    logger.info(f"TTS: Total billable characters for {item_id}: {total_chars}")
+
     segment_files = []
-    output_gcs_filename = f"{item_id}.mp3"
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        speaking_rate=speaking_rate,
+    )
 
     try:
         with tempfile.TemporaryDirectory(prefix=f"speakloudtts_{item_id}_") as tmpdir:
@@ -121,7 +141,7 @@ def synthesize_long_text(title: str, author: str, full_text: str, item_id: str, 
                     response = tts_client.synthesize_speech(
                         request={"input": texttospeech.SynthesisInput(ssml=ssml_text),
                                  "voice": voice_params,
-                                 "audio_config": AUDIO_CONFIG}
+                                 "audio_config": audio_config}
                     )
                     seg_path = os.path.join(tmpdir, f"segment_{idx}.mp3")
                     with open(seg_path, "wb") as out_file:
@@ -148,8 +168,9 @@ def synthesize_long_text(title: str, author: str, full_text: str, item_id: str, 
             logger.info(f"TTS: Running ffmpeg: {' '.join(ffmpeg_cmd)}")
             process = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
             if process.returncode != 0:
-                logger.error(f"TTS: ffmpeg failed: {process.stderr.strip()}")
-                raise Exception(f"ffmpeg failed: {process.stderr.strip()}")
+                err_msg = f"ffmpeg failed with code {process.returncode}. Stderr: {process.stderr.strip()}. Stdout: {process.stdout.strip()}"
+                logger.error(f"TTS: {err_msg}")
+                raise Exception(err_msg)
 
             # Probe duration (optional)
             duration = 0.0
@@ -165,7 +186,6 @@ def synthesize_long_text(title: str, author: str, full_text: str, item_id: str, 
                 logger.warning(f"TTS: Could not probe audio duration: {e}")
 
             # Upload to GCS
-            blob = bucket.blob(output_gcs_filename)
             blob.upload_from_filename(merged_path, content_type="audio/mpeg")
             logger.info(f"TTS: Uploaded to gs://{GCS_BUCKET}/{output_gcs_filename}")
 

@@ -17,10 +17,14 @@ class Config:
     FLASK_ENV = os.getenv("FLASK_ENV", "production")
 
     ALLOWED_VOICES = [
-        "en-US-Standard-C", "en-US-Standard-D", "en-GB-Standard-A",
-        "en-AU-Standard-B", "en-US-Wavenet-D", "en-US-Wavenet-F",
+        {"code": "en-US-Wavenet-D", "name": "Deep Voice Dave (US Male)"},
+        {"code": "en-US-Wavenet-F", "name": "News Anchor Nancy (US Female)"},
+        {"code": "en-GB-Wavenet-B", "name": "British Ben (UK Male)"},
+        {"code": "en-GB-Wavenet-F", "name": "London Lily (UK Female)"},
+        {"code": "en-AU-Neural2-C", "name": "Aussie Ava (AU Female)"},
+        {"code": "en-AU-Neural2-B", "name": "Outback Ollie (AU Male)"},
     ]
-    DEFAULT_VOICE = ALLOWED_VOICES[0]
+    DEFAULT_VOICE = "en-US-Wavenet-D"
 
 class DevelopmentConfig(Config):
     """Development configuration."""

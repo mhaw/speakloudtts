@@ -22,6 +22,7 @@ def process_article_submission(doc_ref, url, voice):
         "title": meta.get("title", "Untitled"),
         "author": meta.get("author", "Unknown"),
         "text": text,
+        "structured_text": meta.get("structured_text", []),
         "text_preview": text[:200],
         "word_count": len(text.split()),
         "reading_time_min": max(1, len(text.split()) // 200),
