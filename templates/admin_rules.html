@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Manage Extraction Rules{% endblock %}
+
+{% block content %}
+<div data-theme="admin" class="max-w-5xl mx-auto py-10 px-4 bg-base-100 rounded-box shadow-lg">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-base-content">Manage Extraction Rules</h1>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm btn-ghost">← Back to Admin</a>
+  </div>
+
+  <!-- Create New Rule Form -->
+  <div class="card bg-base-200/50 mb-8">
+    <div class="card-body">
+      <h2 class="card-title">Create New Rule</h2>
+      <form method="POST" action="{{ url_for('admin.manage_rules') }}" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+        <div>
+          <label for="pattern_type" class="label"><span class="label-text">Rule Type</span></label>
+          <select id="pattern_type" name="pattern_type" class="select select-bordered w-full">
+            <option value="domain" selected>Domain</option>
+            <option value="url_prefix">URL Prefix</option>
+          </select>
+        </div>
+        <div>
+          <label for="pattern" class="label"><span class="label-text">Pattern (e.g., nytimes.com)</span></label>
+          <input type="text" id="pattern" name="pattern" required class="input input-bordered w-full" placeholder="theatlantic.com">
+        </div>
+        <div>
+          <label for="preferred_extractor" class="label"><span class="label-text">Preferred Extractor</span></label>
+          <select id="preferred_extractor" name="preferred_extractor" class="select select-bordered w-full">
+            <option value="newspaper3k">Newspaper3k</option>
+            <option value="trafilatura">Trafilatura</option>
+            <option value="readability-lxml">Readability-LXML</option>
+          </select>
+        </div>
+        <div class="md:col-span-3">
+          <label for="description" class="label"><span class="label-text">Description</span></label>
+          <input type="text" id="description" name="description" class="input input-bordered w-full" placeholder="Prefer Trafilatura for all Atlantic articles">
+        </div>
+        <div class="md:col-span-3 text-right">
+          <button type="submit" class="btn btn-primary">Create Rule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Existing Rules Table -->
+  <h2 class="text-xl font-bold mb-4 text-base-content">Existing Rules</h2>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra table-sm w-full">
+      <thead>
+        <tr>
+          <th>Pattern</th>
+          <th>Type</th>
+          <th>Preferred Extractor</th>
+          <th>Description</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rule in rules %}
+        <tr class="hover">
+          <td class="font-mono">{{ rule.pattern }}</td>
+          <td><span class="badge badge-ghost">{{ rule.pattern_type }}</span></td>
+          <td><span class="badge badge-primary">{{ rule.preferred_extractor }}</span></td>
+          <td>{{ rule.description or 'N/A' }}</td>
+          <td class="text-xs">{{ rule.created_at.strftime('%Y-%m-%d') if rule.created_at else 'N/A' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('admin.delete_rule', rule_id=rule.id) }}" onsubmit="return confirm('Are you sure you want to delete this rule?');">
+              <button type="submit" class="btn btn-xs btn-error btn-ghost">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center py-4">No extraction rules found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

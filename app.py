@@ -304,7 +304,22 @@ def dashboard():
 
     items = []
     next_page = None
+    processing_failures = []
+    
     try:
+        # Fetch recent failures
+        failures_query = db.collection("processing_failures").order_by("failed_at", direction=firestore.Query.DESCENDING).limit(10)
+        for doc in failures_query.stream():
+            failure = doc.to_dict()
+            failure["id"] = doc.id
+            failed_at = failure.get("failed_at")
+            if isinstance(failed_at, datetime):
+                 failure["failed_at_human"] = humanize.naturaltime(datetime.now(timezone.utc) - failed_at)
+            else:
+                 failure["failed_at_human"] = "some time ago"
+            processing_failures.append(failure)
+
+        # Fetch paginated articles
         offset = (page - 1) * page_size
         query = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING)
         paged_query = query.limit(page_size + 1).offset(offset)
@@ -334,8 +349,64 @@ def dashboard():
         page=page,
         prev_page=prev_page,
         next_page=next_page,
-        page_size=page_size
+        page_size=page_size,
+        processing_failures=processing_failures
     )
+
+@admin_bp.route("/rules", methods=["GET", "POST"])
+@login_required
+@admin_required
+def manage_rules():
+    if request.method == "POST":
+        try:
+            pattern = request.form.get("pattern", "").strip().lower()
+            pattern_type = request.form.get("pattern_type")
+            preferred_extractor = request.form.get("preferred_extractor")
+            description = request.form.get("description", "").strip()
+
+            if not all([pattern, pattern_type, preferred_extractor]):
+                flash("Pattern, type, and extractor are required.", "error")
+            else:
+                rule_ref = db.collection("extraction_rules").document()
+                rule_ref.set({
+                    "pattern": pattern,
+                    "pattern_type": pattern_type,
+                    "preferred_extractor": preferred_extractor,
+                    "description": description,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "created_by": current_user.id
+                })
+                flash("Extraction rule created successfully.", "success")
+        except Exception as e:
+            current_app.logger.error(f"Error creating extraction rule: {e}", exc_info=True)
+            flash("Failed to create extraction rule.", "error")
+        return redirect(url_for("admin.manage_rules"))
+
+    # GET request
+    rules = []
+    try:
+        rules_query = db.collection("extraction_rules").order_by("created_at", direction=firestore.Query.DESCENDING)
+        for doc in rules_query.stream():
+            rule = doc.to_dict()
+            rule["id"] = doc.id
+            rules.append(rule)
+    except Exception as e:
+        current_app.logger.error(f"Error fetching extraction rules: {e}", exc_info=True)
+        flash("Could not load extraction rules.", "error")
+        
+    return render_template("admin_rules.html", rules=rules)
+
+@admin_bp.route("/rules/delete/<rule_id>", methods=["POST"])
+@login_required
+@admin_required
+def delete_rule(rule_id):
+    try:
+        db.collection("extraction_rules").document(rule_id).delete()
+        flash("Rule deleted successfully.", "success")
+    except Exception as e:
+        current_app.logger.error(f"Error deleting rule {rule_id}: {e}", exc_info=True)
+        flash("Failed to delete rule.", "error")
+    return redirect(url_for("admin.manage_rules"))
 
 @admin_bp.route("/reprocess/<item_id>", methods=["POST"])
 @login_required

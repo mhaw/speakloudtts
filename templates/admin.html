@@ -39,6 +39,7 @@
           <th>ID</th>
           <th>Title</th>
           <th>Status</th>
+          <th>Extractor</th>
           <th>Published</th>
           <th>Voice</th>
           <th>Publish Date</th>
@@ -72,6 +73,7 @@
               {{ item.status or "—" }}
             </span>
           </td>
+          <td><span class="badge badge-ghost badge-sm">{{ item.source or 'n/a' }}</span></td>
           <td>
             {% if item.published %}
               <span class="font-semibold text-success">Yes</span>
@@ -103,6 +105,43 @@
       </tbody>
     </table>
   </div>
+
+  <div class="mt-12">
+    <h2 class="text-xl font-bold mb-4 text-base-content">Recent Article Processing Failures</h2>
+    {% if processing_failures %}
+    <div class="overflow-x-auto">
+      <table class="table table-zebra table-xs w-full">
+        <thead>
+          <tr>
+            <th>Failed</th>
+            <th>URL</th>
+            <th>User ID</th>
+            <th>Stage</th>
+            <th>Error</th>
+            <th>Original Item</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for failure in processing_failures %}
+          <tr class="hover">
+            <td class="text-xs">{{ failure.failed_at_human }}</td>
+            <td class="break-all max-w-xs truncate"><a href="{{ failure.url }}" target="_blank" class="link link-hover">{{ failure.url }}</a></td>
+            <td class="text-xs">{{ failure.user_id or 'N/A' }}</td>
+            <td><span class="badge badge-warning">{{ failure.stage }}</span></td>
+            <td class="text-error text-xs max-w-sm truncate">{{ failure.error_message }}</td>
+            <td>
+              <a href="{{ url_for('main.item_detail', item_id=failure.item_id) }}" class="btn btn-xs btn-ghost">View Item</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-base-content/70">No processing failures recorded recently. Great job!</p>
+    {% endif %}
+  </div>
+
   <div id="toast-container" class="toast toast-bottom toast-end"></div>
 </div>
 <script src="{{ url_for('static', filename='js/admin.js', v=build_id) }}"></script>
