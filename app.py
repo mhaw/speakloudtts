@@ -5,10 +5,10 @@ from functools import wraps
 import time
 import humanize
 
-from flask (
+from flask import (
     Flask, request, jsonify, render_template, redirect, url_for, flash, Response, Blueprint, current_app
 )
-from flask_login (
+from flask_login import (
     LoginManager, login_user, logout_user, login_required, current_user
 )
 from flask_talisman import Talisman
