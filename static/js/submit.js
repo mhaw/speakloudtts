@@ -62,20 +62,34 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/submit', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json' // Signal to server we want JSON back
                 },
                 body: JSON.stringify(data)
             });
 
-            const responseData = await response.json();
-
-            if (!response.ok) {
-                throw new Error(responseData.error || `Server error (${response.status})`);
+            // Check if the response is JSON before trying to parse it
+            const contentType = response.headers.get("content-type");
+            if (!response.ok || !contentType || !contentType.includes("application/json")) {
+                // If we've been redirected (e.g., to the login page), reload the page
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+                // Otherwise, try to get a text error message
+                const textError = await response.text();
+                throw new Error(textError || `Server returned a non-JSON response (${response.status}).`);
             }
 
-            if (responseData.success && responseData.redirect) {
+            const responseData = await response.json();
+
+            if (!responseData.success) {
+                throw new Error(responseData.error?.message || 'An unknown error occurred.');
+            }
+
+            if (responseData.success && responseData.data.redirect) {
                 // On success, redirect to the items list
-                window.location.href = responseData.redirect;
+                window.location.href = responseData.data.redirect;
             } else {
                 // Handle cases where there might be a success message but no redirect
                 statusDiv.textContent = responseData.message || 'Submission processed!';

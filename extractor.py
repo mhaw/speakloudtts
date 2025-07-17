@@ -2,6 +2,7 @@ import logging
 import requests
 import trafilatura
 import time
+import random
 from trafilatura.settings import use_config
 from readability import Document
 from bs4 import BeautifulSoup
@@ -22,15 +23,31 @@ _RULES_CACHE_TTL = 300 # 5 minutes
 REQUEST_TIMEOUT = 20
 MIN_EXTRACTED_TEXT_LENGTH = 250
 
-FETCH_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0",
+]
+
+BASE_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
     "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.google.com/",
     "Upgrade-Insecure-Requests": "1",
     "Connection": "keep-alive",
 }
+
+def _get_randomized_headers(url: str):
+    """Returns a dict of headers with a random User-Agent and a dynamic Referer."""
+    headers = BASE_HEADERS.copy()
+    headers["User-Agent"] = random.choice(USER_AGENTS)
+    
+    parsed_url = urlparse(url)
+    referer = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+    headers["Referer"] = referer
+    
+    return headers
 
 def _get_extraction_rules():
     """Fetches extraction rules from Firestore with caching."""
@@ -144,27 +161,44 @@ def extract_article(url: str) -> dict:
     structured_text = []
     error_context, used_rule_id = None, None
     domain = urlparse(url).netloc
+    resp = None  # Initialize resp to None
 
     try:
-        resp = requests.get(url, headers=FETCH_HEADERS, timeout=REQUEST_TIMEOUT)
-        status_code, content_type = resp.status_code, resp.headers.get("Content-Type", "unknown").lower()
-        logger.info(f"Fetched {url} | Status: {status_code}, Content-Type: {content_type}")
-        if status_code != 200: raise ValueError(f"Could not fetch content. Server responded with status {status_code}.")
-        if 'text/html' not in content_type: raise ValueError(f"Content is not a standard HTML page (Content-Type: '{content_type}').")
+        request_headers = _get_randomized_headers(url)
+        resp = requests.get(url, headers=request_headers, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
+
+        status_code = resp.status_code
+        content_type = resp.headers.get("Content-Type", "unknown").lower()
+        content_length = len(resp.content)
+
+        logger.info(f"Fetched {url} | Status: {status_code}, Content-Type: {content_type}, Length: {content_length} bytes")
+
+        if 'text/html' not in content_type:
+            error_msg = f"Unsupported content type: '{content_type}'. This extractor only supports 'text/html'."
+            logger.error(f"{error_msg} for URL: {url}")
+            raise ValueError(error_msg)
+
+        if content_length < 2048:
+            logger.warning(f"Response body for {url} is unusually short ({content_length} bytes). This may indicate a soft block or an empty page.")
+            logger.debug(f"Short response body snippet for {url}: {resp.content[:200]!r}")
+
         try:
             html_content = resp.content.decode('utf-8')
         except UnicodeDecodeError:
             logger.warning(f"UTF-8 decoding failed for {url}. Falling back to detected encoding.")
             html_content = resp.text
+        
         last_modified_header, etag_header = resp.headers.get("Last-Modified", ""), resp.headers.get("ETag", "")
         step_status["fetch"] = "success"
+
     except requests.exceptions.RequestException as e:
         logger.error(f"Network error fetching {url}: {e}", exc_info=True)
         raise ValueError(f"Could not connect to the website. Please check the link.") from e
     except Exception as e:
         logger.error(f"Failed to fetch/validate {url}: {e}", exc_info=True)
-        if isinstance(e, ValueError): raise
+        if isinstance(e, ValueError):
+            raise
         return { "url": url, "title": "", "author": "", "text": "", "structured_text": [], "publish_date": "", "source": "fetch_error", "error": f"fetch_error: {e}", "last_modified": "", "etag": "", "extract_status": step_status, "used_rule_id": None }
 
     soup = BeautifulSoup(html_content, "html.parser")
@@ -215,7 +249,22 @@ def extract_article(url: str) -> dict:
     if not text:
         error_context = "all_extractors_failed"
         logger.error(f"Extraction failed for {url} after all methods.")
-    
+        if resp:
+            logger.debug(f"--- Failed Extraction Debug Info for {url} ---")
+            logger.debug(f"Request Headers: {json.dumps(dict(resp.request.headers), indent=2)}")
+            logger.debug(f"Status Code: {resp.status_code}")
+            logger.debug(f"Content-Type: {resp.headers.get('Content-Type')}")
+            logger.debug(f"Response Headers: {json.dumps(dict(resp.headers), indent=2)}")
+            
+            try:
+                body_bytes = resp.content[:500]
+                body_str = body_bytes.decode(resp.encoding or 'utf-8', errors='replace')
+                logger.debug(f"Response Body (first 500 bytes, as bytes): {body_bytes!r}")
+                logger.debug(f"Response Body (first 500 bytes, decoded): \n{body_str}")
+            except Exception as e:
+                logger.debug(f"Could not decode response body for logging: {e}")
+            logger.debug("--- End Debug Info ---")
+
     word_count = len(text.split()) if text else 0
     reading_time_min = max(1, word_count // 200) if word_count > 0 else 0
 
