@@ -120,8 +120,24 @@ def get_item_or_abort(f):
                 return api_error("Item not found", 404)
             return render_template("404.html"), 404
         
-        item_user_id = doc.to_dict().get("user_id")
+        item_data = doc.to_dict()
+        is_published = item_data.get("published", False)
+
+        # Public can view published items
+        if is_published:
+            kwargs['doc_ref'] = doc_ref
+            kwargs['doc'] = doc
+            return f(item_id, *args, **kwargs)
+
+        # If not published, user must be authenticated
+        if not current_user.is_authenticated:
+            flash("You must be logged in to view this item.", "error")
+            return redirect(url_for("main.login", next=request.url))
+
+        # Authenticated users must be owner or admin
         is_admin = getattr(current_user, "is_admin", False)
+        item_user_id = item_data.get("user_id")
+        
         if not is_admin and item_user_id != current_user.id:
              if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
                 return api_error("Forbidden", 403)
@@ -250,12 +266,18 @@ def add_article():
 @main_bp.route('/items')
 @login_required
 def list_items():
-    items_ref = db.collection("items").where("user_id", "==", current_user.id).order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(50)
-    result = [_doc_to_dict(doc) for doc in items_ref.stream()]
-    return render_template("items.html", items=result)
+    tag_filter = request.args.get('tag')
+    items_ref = db.collection("items").where("user_id", "==", current_user.id)
+    
+    if tag_filter:
+        items_ref = items_ref.where("tags", "array_contains", tag_filter)
+        
+    query = items_ref.order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(50)
+    result = [_doc_to_dict(doc) for doc in query.stream()]
+    
+    return render_template("items.html", items=result, tag_filter=tag_filter)
 
 @main_bp.route("/item/<item_id>")
-@login_required
 @get_item_or_abort
 def item_detail(item_id, doc_ref, doc):
     item = doc.to_dict()
@@ -288,6 +310,20 @@ def update_tags(item_id, doc_ref, doc):
     except Exception as e:
         current_app.logger.error(f"Error updating tags for item {item_id}: {e}", exc_info=True, extra=_get_log_extra())
         flash("Failed to update tags.", "error")
+    return redirect(url_for("main.item_detail", item_id=item_id))
+
+@main_bp.route("/item/<item_id>/toggle_publish", methods=["POST"])
+@login_required
+@get_item_or_abort
+def toggle_publish(item_id, doc_ref, doc):
+    try:
+        current_status = doc.to_dict().get("published", False)
+        new_status = not current_status
+        doc_ref.update({"published": new_status})
+        flash(f"Article has been {'published' if new_status else 'unpublished'}.", "success")
+    except Exception as e:
+        current_app.logger.error(f"Error toggling publish status for item {item_id}: {e}", exc_info=True, extra=_get_log_extra())
+        flash("Failed to update publish status.", "error")
     return redirect(url_for("main.item_detail", item_id=item_id))
 
 # --- Admin Routes ---

@@ -1,5 +1,6 @@
 # processing.py
 import logging
+import re
 from google.cloud import firestore
 from extractor import extract_article
 from tts import synthesize_long_text
@@ -23,6 +24,76 @@ def _log_failure(item_id, user_id, url, error_message, stage):
     except Exception as e:
         logger.error(f"Failed to log processing failure for item {item_id}: {e}", exc_info=True)
 
+def sanitize_content(text: str, structured_text: list) -> tuple[str, list]:
+    """
+    Cleans extracted text and structured content to remove common cruft.
+    Returns a tuple of (sanitized_text, sanitized_structured_text).
+    """
+    if not text and not structured_text:
+        return "", []
+
+    # Patterns to remove (case-insensitive)
+    cruft_patterns = [
+        r"share this article",
+        r"share on facebook",
+        r"share on twitter",
+        r"share on linkedin",
+        r"share on pinterest",
+        r"share on whatsapp",
+        r"share on email",
+        r"click to share",
+        r"we use cookies",
+        r"cookie policy",
+        r"subscribe to our newsletter",
+        r"sign up for our newsletter",
+        r"related stories",
+        r"related articles",
+        r"read more",
+        r"continue reading",
+        r"advertisement",
+        r"supported by",
+        r"follow us on",
+        r"all rights reserved",
+        r"reprints & permissions",
+    ]
+    
+    # Combine patterns into a single regex
+    combined_pattern = re.compile(r'\b(' + '|'.join(cruft_patterns) + r')\b', re.IGNORECASE)
+
+    # 1. Sanitize the plain text
+    sanitized_text = combined_pattern.sub('', text)
+    # Normalize whitespace: remove leading/trailing whitespace from lines and reduce multiple newlines to two
+    sanitized_text = '\n'.join(line.strip() for line in sanitized_text.splitlines())
+    sanitized_text = re.sub(r'\n{3,}', '\n\n', sanitized_text).strip()
+
+    # 2. Sanitize the structured text
+    sanitized_structured_text = []
+    for block in structured_text:
+        if 'text' in block and isinstance(block['text'], str):
+            original_block_text = block['text']
+            # Remove cruft from the block's text
+            cleaned_block_text = combined_pattern.sub('', original_block_text).strip()
+            
+            # Only add the block if it still has content
+            if cleaned_block_text:
+                block['text'] = cleaned_block_text
+                sanitized_structured_text.append(block)
+        elif 'items' in block and isinstance(block['items'], list):
+            # For lists (ul, ol), clean each item
+            cleaned_items = []
+            for item in block['items']:
+                cleaned_item = combined_pattern.sub('', item).strip()
+                if cleaned_item:
+                    cleaned_items.append(cleaned_item)
+            
+            if cleaned_items:
+                block['items'] = cleaned_items
+                sanitized_structured_text.append(block)
+
+    logger.info(f"Sanitization complete. Text length changed from {len(text)} to {len(sanitized_text)}.")
+    return sanitized_text, sanitized_structured_text
+
+
 def process_article_submission(doc_ref, url, voice):
     """
     Extracts article, synthesizes audio, and updates Firestore doc.
@@ -35,13 +106,15 @@ def process_article_submission(doc_ref, url, voice):
     try:
         # 1. Extract article content
         meta = extract_article(url)
-        text = meta.get("text", "")
+        
+        # 1a. Sanitize the extracted content
+        text, structured_text = sanitize_content(meta.get("text", ""), meta.get("structured_text", []))
         
         update_data = {
             "title": meta.get("title", "Untitled"),
             "author": meta.get("author", "Unknown"),
             "text": text,
-            "structured_text": meta.get("structured_text", []),
+            "structured_text": structured_text,
             "text_preview": text[:200],
             "word_count": len(text.split()),
             "reading_time_min": max(1, len(text.split()) // 200),
@@ -57,7 +130,7 @@ def process_article_submission(doc_ref, url, voice):
         doc_ref.update(update_data)
 
         if not text or meta.get("error"):
-            error_msg = meta.get('error', 'No text found.')
+            error_msg = meta.get('error', 'No text found after sanitization.')
             raise ValueError(f"Article extraction failed: {error_msg}")
 
         # 2. Synthesize audio
@@ -89,3 +162,4 @@ def process_article_submission(doc_ref, url, voice):
         logger.error(f"An unexpected error occurred processing {item_id}: {e}", exc_info=True)
         _log_failure(item_id, user_id, url, str(e), "unknown")
         raise # Re-raise
+

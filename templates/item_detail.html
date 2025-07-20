@@ -1,5 +1,16 @@
 {% extends "base.html" %}
 {% block title %}{{ item.title or "Article" }}{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta property="og:title" content="{{ item.title or 'Untitled Article' }}">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="{{ request.url }}">
+  {% if item.audio_url %}<meta property="og:audio" content="{{ item.audio_url }}">{% endif %}
+  <meta property="og:description" content="{{ (structured_text[0].text if structured_text else '') | truncate(150) }}">
+  <meta name="twitter:card" content="summary_large_image">
+{% endblock %}
+
 {% block content %}
 <div class="max-w-3xl mx-auto py-8 space-y-6">
 
@@ -85,26 +96,27 @@
       </div>
     </div>
 
-    {% if is_authenticated %}
+    {% if current_user.is_authenticated %}
     <fieldset class="border border-base-content/20 rounded-lg p-4">
       <legend class="text-sm font-semibold px-2">Admin Controls</legend>
       <div class="flex flex-wrap items-center gap-4">
         <form method="POST" action="{{ url_for('main.update_tags', item_id=item.id) }}" class="flex items-center gap-2">
           <label for="tags-input" class="sr-only">Tags</label>
-          <input id="tags-input" type="text" name="tags" value="{{ tags|join(', ') }}" placeholder="Add tags: news, tech" class="input input-bordered input-sm w-full max-w-xs" />
+          <input id="tags-input" type="text" name="tags" value="{{ item.tags|join(', ') }}" placeholder="Add tags: news, tech" class="input input-bordered input-sm w-full max-w-xs" />
           <button type="submit" class="btn btn-sm btn-primary">Save Tags</button>
         </form>
 
-        {% if item.status != 'complete' %}
-        <form method="POST" action="{{ url_for('main.admin_reprocess_item', item_id=item.id) }}" class="inline">
-          <button type="submit" class="btn btn-sm btn-warning">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.181-3.183m-4.991-2.651v.001" />
-            </svg>
-            Reprocess
-          </button>
+        <form method="POST" action="{{ url_for('main.toggle_publish', item_id=item.id) }}" class="inline">
+            <button type="submit" class="btn btn-sm btn-ghost">
+              {% if item.published %}
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a9.97 9.97 0 01-1.563 3.029m0 0l-2.117 2.116" /></svg>
+                Unpublish
+              {% else %}
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.522 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                Publish
+              {% endif %}
+            </button>
         </form>
-        {% endif %}
       </div>
     </fieldset>
     {% endif %}

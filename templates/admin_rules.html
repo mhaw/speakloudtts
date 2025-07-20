@@ -8,6 +8,15 @@
     <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm btn-ghost">← Back to Admin</a>
   </div>
 
+  <!-- Info Box -->
+  <div role="alert" class="alert alert-info mb-6">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+    <div>
+      <h3 class="font-bold">How Rules Work</h3>
+      <div class="text-xs">When a URL matches a rule, the system will now <strong>exclusively</strong> use the specified extractor. If that single extractor fails, the process will stop and report an error, it will not attempt others. This provides more predictable results for difficult sites.</div>
+    </div>
+  </div>
+
   <!-- Create New Rule Form -->
   <div class="card bg-base-200/50 mb-8">
     <div class="card-body">

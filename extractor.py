@@ -216,21 +216,22 @@ def extract_article(url: str) -> dict:
     publisher = get_meta_content(soup, prop="og:site_name") or domain
     section = get_meta_content(soup, prop="article:section")
 
-    extraction_methods = [
-        ("newspaper3k", _extract_with_newspaper),
-        ("trafilatura", _extract_with_trafilatura),
-        ("readability-lxml", _extract_with_readability),
-    ]
-    
     rules = _get_extraction_rules()
     matching_rule = _find_matching_rule(url, domain, rules)
+    
+    extraction_methods_to_run = extraction_methods
     if matching_rule:
         used_rule_id = matching_rule["id"]
         preferred = matching_rule["preferred_extractor"]
-        logger.info(f"Found matching rule {used_rule_id}: Preferring '{preferred}' for {url}.")
-        extraction_methods.sort(key=lambda x: x[0] != preferred)
+        logger.info(f"Found matching rule {used_rule_id}: Forcing use of '{preferred}' for {url}.")
+        
+        preferred_method = next((method for method in extraction_methods if method[0] == preferred), None)
+        if preferred_method:
+            extraction_methods_to_run = [preferred_method]
+        else:
+            logger.warning(f"Rule {used_rule_id} specified an unknown extractor '{preferred}'. Falling back to default order.")
 
-    for name, func in extraction_methods:
+    for name, func in extraction_methods_to_run:
         logger.debug(f"Attempting extraction with {name} for {url}")
         try:
             extracted_data = func(html_content, url)
