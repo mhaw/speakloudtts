@@ -39,14 +39,14 @@
           <th>ID</th>
           <th>Title</th>
           <th>Status</th>
-          <th>Extractor</th>
+          <th class="hidden sm:table-cell">Extractor</th>
           <th>Published</th>
-          <th>Voice</th>
-          <th>Publish Date</th>
-          <th>Words</th>
-          <th>IP</th>
-          <th>Submitted</th>
-          <th>Size</th>
+          <th class="hidden sm:table-cell">Voice</th>
+          <th class="hidden md:table-cell">Publish Date</th>
+          <th class="hidden md:table-cell">Words</th>
+          <th class="hidden lg:table-cell">IP</th>
+          <th class="hidden lg:table-cell">Submitted</th>
+          <th class="hidden lg:table-cell">Size</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -56,7 +56,9 @@
           <td><input type="checkbox" class="select-item checkbox checkbox-primary" value="{{ item.id }}"></td>
           <td class="break-all text-xs">{{ item.id }}</td>
           <td>
-            <span class="font-medium">{{ item.title or "Untitled" }}</span>
+            <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="font-medium link link-hover">
+              {{ item.title or "Untitled" }}
+            </a>
             {% if item.error_message %}
               <div class="tooltip tooltip-bottom tooltip-error" data-tip="{{ item.error_message }}">
                 <span class="block text-xs text-error/80">Error</span>
@@ -68,12 +70,17 @@
               </div>
             {% endif %}
           </td>
-          <td class="font-semibold">
-            <span class="{% if item.status == 'processing' %}text-warning{% elif item.status == 'error' or item.status == 'failed' %}text-error{% elif item.status == 'done' %}text-success{% else %}text-base-content/70{% endif %}">
+          <td>
+            <div class="badge badge-sm
+              {% if item.status == 'done' %}badge-success
+              {% elif item.status == 'processing' %}badge-warning
+              {% elif item.status == 'error' or item.status == 'failed' %}badge-error
+              {% else %}badge-ghost
+              {% endif %}">
               {{ item.status or "—" }}
-            </span>
+            </div>
           </td>
-          <td><span class="badge badge-ghost badge-sm">{{ item.source or 'n/a' }}</span></td>
+          <td class="hidden sm:table-cell"><span class="badge badge-ghost badge-sm">{{ item.source or 'n/a' }}</span></td>
           <td>
             {% if item.published %}
               <span class="font-semibold text-success">Yes</span>
@@ -81,12 +88,12 @@
               <span class="text-base-content/70">No</span>
             {% endif %}
           </td>
-          <td>{{ item.voice or "—" }}</td>
-          <td>{{ item.publish_date_fmt or "N/A" }}</td>
-          <td>{{ item.word_count or "—" }}</td>
-          <td>{{ item.submitted_ip or "—" }}</td>
-          <td>{{ item.submitted_at_fmt or "���" }}</td>
-          <td>{{ item.storage_bytes or "—" }}</td>
+          <td class="hidden sm:table-cell">{{ item.voice or "—" }}</td>
+          <td class="hidden md:table-cell">{{ item.publish_date_fmt or "N/A" }}</td>
+          <td class="hidden md:table-cell">{{ item.word_count or "—" }}</td>
+          <td class="hidden lg:table-cell">{{ item.submitted_ip or "—" }}</td>
+          <td class="hidden lg:table-cell">{{ item.submitted_at_fmt or "—" }}</td>
+          <td class="hidden lg:table-cell">{{ item.storage_bytes or "—" }}</td>
           <td class="flex flex-wrap gap-1">
             <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="btn btn-xs btn-ghost">View</a>
             <button type="button" class="reprocess-btn btn btn-xs btn-ghost text-warning" data-id="{{ item.id }}">Reprocess</button>
@@ -125,12 +132,13 @@
           {% for failure in processing_failures %}
           <tr class="hover">
             <td class="text-xs">{{ failure.failed_at_human }}</td>
-            <td class="break-all max-w-xs truncate"><a href="{{ failure.url }}" target="_blank" class="link link-hover">{{ failure.url }}</a></td>
+            <td class="break-all max-w-xs truncate"><a href="{{ failure.url }}" target="_blank" rel="noopener noreferrer" class="link link-hover">{{ failure.url }}</a></td>
             <td class="text-xs">{{ failure.user_id or 'N/A' }}</td>
             <td><span class="badge badge-warning">{{ failure.stage }}</span></td>
             <td class="text-error text-xs max-w-sm truncate">{{ failure.error_message }}</td>
-            <td>
-              <a href="{{ url_for('main.item_detail', item_id=failure.item_id) }}" class="btn btn-xs btn-ghost">View Item</a>
+            <td class="flex gap-1">
+              <a href="{{ url_for('main.item_detail', item_id=failure.item_id) }}" class="btn btn-xs btn-ghost">View</a>
+              <button type="button" class="retry-btn btn btn-xs btn-ghost text-accent" data-id="{{ failure.item_id }}">Retry</button>
             </td>
           </tr>
           {% endfor %}

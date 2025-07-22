@@ -53,8 +53,8 @@
               </button>
               <span class="status-msg text-xs"></span>
               <div class="flex space-x-2 mt-1">
-                <a href="{{ doc.url }}" target="_blank"
-                   class="text-indigo-600 hover:underline text-xs">Open</a>
+                <a href="{{ doc.url }}" target="_blank" rel="noopener noreferrer"
+                     class="link link-hover text-xs break-all">{{ doc.url }}</a>
                 <a href="/items/{{ doc.id }}"
                    class="text-indigo-600 hover:underline text-xs">View</a>
               </div>

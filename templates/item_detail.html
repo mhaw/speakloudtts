@@ -35,8 +35,7 @@
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-base-content/70 text-sm mt-2">
       <span>By <strong>{{ item.author or "Unknown" }}</strong></span>
       {% if item.publish_date_fmt %}<span>{{ item.publish_date_fmt }}</span>{% endif %}
-      {% if item.word_count %}<span>{{ item.word_count }} words</span>{% endif %}
-      {% if item.reading_time_min %}<span>~{{ item.reading_time_min }} min read</span>{% endif %}
+      <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" class="link link-hover text-primary">View Original</a>
     </div>
   </div>
 
@@ -176,7 +175,7 @@
       <div class="collapse-content">
         <dl class="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 p-4 text-sm">
           <dt class="font-semibold col-span-1">Original URL</dt>
-          <dd class="col-span-2 break-all"><a href="{{ item.url }}" target="_blank" class="link link-hover">{{ item.url }}</a></dd>
+          <dd class="col-span-2 break-all"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" class="link link-hover">{{ item.url }}</a></dd>
 
           <dt class="font-semibold col-span-1">Status</dt>
           <dd class="col-span-2"><span class="badge badge-ghost">{{ item.status|capitalize or '—' }}</span></dd>

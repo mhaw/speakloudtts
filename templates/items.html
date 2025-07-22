@@ -27,6 +27,9 @@
               </a>
             </h3>
             <div class="text-sm text-base-content/60 flex items-center gap-2">
+              {% if item.favicon_url %}
+              <img src="{{ item.favicon_url }}" alt="Favicon for {{ item.domain }}" class="w-4 h-4">
+              {% endif %}
               <span>{{ item.author or 'Unknown Author' }}</span>
               <span class="text-base-content/40">•</span>
               <span>{{ item.domain or 'Unknown Source' }}</span>
@@ -35,12 +38,11 @@
             </div>
           </div>
           <div class="flex-shrink-0">
-             <div class="badge 
+             <div class="badge badge-sm
               {% if item.status == 'done' %}badge-success
               {% elif item.status == 'error' %}badge-error
               {% else %}badge-ghost
-              {% endif %}
-              badge-outline">
+              {% endif %}">
               {{ item.status | capitalize }}
             </div>
           </div>
