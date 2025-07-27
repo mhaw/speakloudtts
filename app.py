@@ -298,6 +298,18 @@ def podcast_feed():
     feed_xml = generate_feed(db, storage_client, app_config)
     return Response(feed_xml, mimetype='application/rss+xml')
 
+@main_bp.route("/health")
+def health_check():
+    """A simple health check endpoint."""
+    try:
+        # Perform a lightweight check, e.g., try to get a non-existent doc.
+        # This verifies credentials and connectivity to Firestore without much cost.
+        db.collection("health_check").document("ping").get(timeout=5)
+        return api_success(data={"database": "ok"})
+    except Exception as e:
+        current_app.logger.critical(f"Health check failed: {e}", exc_info=True)
+        return api_error("Application is unhealthy", 503)
+
 @main_bp.route("/item/<item_id>/tags", methods=["POST"])
 @login_required
 @get_item_or_abort
@@ -332,18 +344,17 @@ def toggle_publish(item_id, doc_ref, doc):
 @admin_required
 def dashboard():
     page_size = 25
-    try:
-        page = int(request.args.get("page", 1))
-        if page < 1: page = 1
-    except ValueError:
-        page = 1
+    start_after_doc_id = request.args.get("start_after")
+    search_term = request.args.get("search_term", "").strip()
+    status_filter = request.args.get("status_filter", "").strip()
 
     items = []
-    next_page = None
+    item_docs = []
+    next_page_cursor = None
     processing_failures = []
     
     try:
-        # Fetch recent failures
+        # Fetch recent failures (this part remains unchanged)
         failures_query = db.collection("processing_failures").order_by("failed_at", direction=firestore.Query.DESCENDING).limit(10)
         for doc in failures_query.stream():
             failure = doc.to_dict()
@@ -355,15 +366,34 @@ def dashboard():
                  failure["failed_at_human"] = "some time ago"
             processing_failures.append(failure)
 
-        # Fetch paginated articles
-        offset = (page - 1) * page_size
-        query = db.collection("items").order_by("submitted_at", direction=firestore.Query.DESCENDING)
-        paged_query = query.limit(page_size + 1).offset(offset)
-        items = [_doc_to_dict(doc) for doc in paged_query.stream()]
+        # Base query
+        query = db.collection("items")
 
-        if len(items) > page_size:
-            next_page = page + 1
-            items = items[:page_size]
+        # Apply filters
+        if status_filter:
+            query = query.where("status", "==", status_filter)
+        
+        # Apply search term and ordering
+        if search_term:
+            flash("Note: When searching by URL, results are ordered by URL.", "info")
+            query = query.where("url", ">=", search_term).where("url", "<=", search_term + '\uf8ff')
+            query = query.order_by("url")
+        else:
+            query = query.order_by("submitted_at", direction=firestore.Query.DESCENDING)
+
+        if start_after_doc_id:
+            start_after_doc = db.collection("items").document(start_after_doc_id).get()
+            if start_after_doc.exists:
+                query = query.start_after(start_after_doc)
+
+        paged_query = query.limit(page_size + 1)
+        item_docs = list(paged_query.stream())
+
+        if len(item_docs) > page_size:
+            next_page_cursor = item_docs[page_size-1].id
+            item_docs = item_docs[:page_size]
+
+        items = [_doc_to_dict(doc) for doc in item_docs]
 
         for item in items:
             item["storage_bytes"] = item.get("storage_bytes", "—")
@@ -377,16 +407,13 @@ def dashboard():
         current_app.logger.error(f"Error fetching admin dashboard data: {e}", exc_info=True, extra=_get_log_extra())
         flash("Error fetching articles. Please try again later.", "error")
 
-    prev_page = page - 1 if page > 1 else None
-
     return render_template(
         "admin.html",
         items=items,
-        page=page,
-        prev_page=prev_page,
-        next_page=next_page,
-        page_size=page_size,
-        processing_failures=processing_failures
+        next_page_cursor=next_page_cursor,
+        processing_failures=processing_failures,
+        search_term=search_term,
+        status_filter=status_filter
     )
 
 @admin_bp.route("/rules", methods=["GET", "POST"])
@@ -589,7 +616,15 @@ def retry_stuck_items():
 def failed_articles():
     try:
         items_ref = db.collection("items").where("status", "==", "error").order_by("submitted_at", direction=firestore.Query.DESCENDING)
-        errors = [_doc_to_dict(doc) for doc in items_ref.stream()]
+        
+        errors = []
+        for doc in items_ref.stream():
+            item = _doc_to_dict(doc)
+            if item:
+                # Ensure extract_status is available for the template
+                item["extract_status"] = doc.to_dict().get("extract_status", None)
+                errors.append(item)
+
         return render_template("failed_articles.html", errors=errors)
     except FailedPrecondition as e:
         current_app.logger.error(f"Firestore index missing or permission error in failed_articles: {e}", exc_info=True, extra=_get_log_extra())

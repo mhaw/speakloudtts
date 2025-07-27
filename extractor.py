@@ -153,42 +153,50 @@ def _extract_with_readability(html_content: str, url: str) -> dict:
             text_parts.extend(item['items'])
     return { "text": "\n\n".join(text_parts), "title": doc.short_title(), "structured_text": structured_content }
 
+def _choose_best_extraction(results: list) -> dict:
+    """
+    Chooses the best extraction result based on heuristics.
+    - Prioritizes structured content.
+    - Falls back to the longest text.
+    """
+    if not results:
+        return None
+
+    # Prefer extractions that produced structured text
+    with_structured_text = [r for r in results if r.get("structured_text")]
+    if with_structured_text:
+        return max(with_structured_text, key=lambda r: len(r.get("text", "")))
+
+    # Fallback: return the one with the longest text
+    return max(results, key=lambda r: len(r.get("text", "")))
+
+extraction_methods = [
+    ("newspaper3k", _extract_with_newspaper),
+    ("trafilatura", _extract_with_trafilatura),
+    ("readability", _extract_with_readability),
+]
+
 def extract_article(url: str) -> dict:
     logger.info(f"📰 Attempting to extract article from URL: {url}")
     step_status = {"fetch": "pending", "newspaper3k": "pending", "trafilatura": "pending", "readability": "pending"}
-    text, title, author, publish_date, source_lib = "", "", "", "", "unknown"
     html_content, last_modified_header, etag_header = "", "", ""
-    structured_text = []
     error_context, used_rule_id = None, None
     domain = urlparse(url).netloc
-    resp = None  # Initialize resp to None
+    resp = None
 
     try:
         request_headers = _get_randomized_headers(url)
         resp = requests.get(url, headers=request_headers, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
-
-        status_code = resp.status_code
-        content_type = resp.headers.get("Content-Type", "unknown").lower()
-        content_length = len(resp.content)
-
+        status_code, content_type, content_length = resp.status_code, resp.headers.get("Content-Type", "unknown").lower(), len(resp.content)
         logger.info(f"Fetched {url} | Status: {status_code}, Content-Type: {content_type}, Length: {content_length} bytes")
 
         if 'text/html' not in content_type:
-            error_msg = f"Unsupported content type: '{content_type}'. This extractor only supports 'text/html'."
-            logger.error(f"{error_msg} for URL: {url}")
-            raise ValueError(error_msg)
-
+            raise ValueError(f"Unsupported content type: '{content_type}'.")
         if content_length < 2048:
-            logger.warning(f"Response body for {url} is unusually short ({content_length} bytes). This may indicate a soft block or an empty page.")
-            logger.debug(f"Short response body snippet for {url}: {resp.content[:200]!r}")
+            logger.warning(f"Response body for {url} is unusually short ({content_length} bytes).")
 
-        try:
-            html_content = resp.content.decode('utf-8')
-        except UnicodeDecodeError:
-            logger.warning(f"UTF-8 decoding failed for {url}. Falling back to detected encoding.")
-            html_content = resp.text
-        
+        html_content = resp.text
         last_modified_header, etag_header = resp.headers.get("Last-Modified", ""), resp.headers.get("ETag", "")
         step_status["fetch"] = "success"
 
@@ -197,19 +205,20 @@ def extract_article(url: str) -> dict:
         raise ValueError(f"Could not connect to the website. Please check the link.") from e
     except Exception as e:
         logger.error(f"Failed to fetch/validate {url}: {e}", exc_info=True)
-        if isinstance(e, ValueError):
-            raise
+        if isinstance(e, ValueError): raise
         return { "url": url, "title": "", "author": "", "text": "", "structured_text": [], "publish_date": "", "source": "fetch_error", "error": f"fetch_error: {e}", "last_modified": "", "etag": "", "extract_status": step_status, "used_rule_id": None }
 
     soup = BeautifulSoup(html_content, "html.parser")
     title = get_meta_content(soup, prop="og:title") or (soup.title.string if soup.title else "")
     author = get_meta_content(soup, name="author") or get_meta_content(soup, prop="article:author")
     date_str_meta = get_meta_content(soup, prop="article:published_time") or get_meta_content(soup, name="publish_date") or get_meta_content(soup, name="datePublished")
+    publish_date = ""
     if date_str_meta:
         try:
             publish_date = date_parser.isoparse(date_str_meta).isoformat()
         except (date_parser.ParserError, TypeError) as e:
             logger.warning(f"Could not parse date string '{date_str_meta}': {e}")
+    
     icon_tag = soup.find("link", rel=lambda x: x and "icon" in x.lower())
     raw_icon_href = icon_tag["href"] if icon_tag and icon_tag.has_attr("href") else ""
     favicon_url = urljoin(url, raw_icon_href) if raw_icon_href else ""
@@ -224,47 +233,39 @@ def extract_article(url: str) -> dict:
         used_rule_id = matching_rule["id"]
         preferred = matching_rule["preferred_extractor"]
         logger.info(f"Found matching rule {used_rule_id}: Forcing use of '{preferred}' for {url}.")
-        
-        preferred_method = next((method for method in extraction_methods if method[0] == preferred), None)
+        preferred_method = next((m for m in extraction_methods if m[0] == preferred), None)
         if preferred_method:
             extraction_methods_to_run = [preferred_method]
         else:
-            logger.warning(f"Rule {used_rule_id} specified an unknown extractor '{preferred}'. Falling back to default order.")
+            logger.warning(f"Rule {used_rule_id} specified an unknown extractor '{preferred}'. Falling back.")
 
+    successful_extractions = []
     for name, func in extraction_methods_to_run:
         logger.debug(f"Attempting extraction with {name} for {url}")
         try:
             extracted_data = func(html_content, url)
-            text = _validate_and_log_text(extracted_data.get("text", ""), url, MIN_EXTRACTED_TEXT_LENGTH)
-            source_lib = name
+            validated_text = _validate_and_log_text(extracted_data.get("text", ""), url, MIN_EXTRACTED_TEXT_LENGTH)
+            extracted_data["text"] = validated_text
+            extracted_data["source_lib"] = name
+            successful_extractions.append(extracted_data)
             step_status[name] = "success"
-            if extracted_data.get("title"): title = extracted_data["title"]
-            if extracted_data.get("author"): author = extracted_data["author"]
-            if extracted_data.get("structured_text"): structured_text = extracted_data["structured_text"]
             logger.info(f"Successfully extracted content with {name} for {url}.")
-            break
         except Exception as e:
             logger.warning(f"{name} extraction failed for {url}: {e}")
             step_status[name] = f"failed: {e}"
+
+    best_extraction = _choose_best_extraction(successful_extractions)
     
-    if not text:
+    if not best_extraction:
         error_context = "all_extractors_failed"
         logger.error(f"Extraction failed for {url} after all methods.")
-        if resp:
-            logger.debug(f"--- Failed Extraction Debug Info for {url} ---")
-            logger.debug(f"Request Headers: {json.dumps(dict(resp.request.headers), indent=2)}")
-            logger.debug(f"Status Code: {resp.status_code}")
-            logger.debug(f"Content-Type: {resp.headers.get('Content-Type')}")
-            logger.debug(f"Response Headers: {json.dumps(dict(resp.headers), indent=2)}")
-            
-            try:
-                body_bytes = resp.content[:500]
-                body_str = body_bytes.decode(resp.encoding or 'utf-8', errors='replace')
-                logger.debug(f"Response Body (first 500 bytes, as bytes): {body_bytes!r}")
-                logger.debug(f"Response Body (first 500 bytes, decoded): \n{body_str}")
-            except Exception as e:
-                logger.debug(f"Could not decode response body for logging: {e}")
-            logger.debug("--- End Debug Info ---")
+        text, structured_text, source_lib = "", [], "unknown"
+    else:
+        text = best_extraction.get("text", "")
+        structured_text = best_extraction.get("structured_text", [])
+        source_lib = best_extraction.get("source_lib", "unknown")
+        if best_extraction.get("title"): title = best_extraction["title"]
+        if best_extraction.get("author"): author = best_extraction["author"]
 
     word_count = len(text.split()) if text else 0
     reading_time_min = max(1, word_count // 200) if word_count > 0 else 0

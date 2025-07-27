@@ -130,29 +130,34 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(endpoint, { method: 'POST' });
       const resData = await res.json();
       if (!res.ok || !resData.success) throw new Error(resData.error?.message || 'Unknown error');
+      
       showToast(`${actionName.charAt(0).toUpperCase() + actionName.slice(1)} triggered for ${id}.`);
-      setTimeout(() => window.location.reload(), 1500);
+
+      // --- Live UI Updates ---
+      if (actionName === 'delete') {
+        row.style.transition = 'opacity 0.5s';
+        row.style.opacity = '0';
+        setTimeout(() => row.remove(), 500);
+      } else if (actionName === 'reprocess' || actionName === 'retry') {
+        const statusCell = row.querySelector('.badge');
+        if (statusCell) {
+          statusCell.className = 'badge badge-sm badge-warning';
+          statusCell.textContent = 'reprocessing';
+        }
+        // Remove the error tooltip if it exists
+        const errorTooltip = row.querySelector('.tooltip-error');
+        if (errorTooltip) errorTooltip.remove();
+        setRowWorking(row, false);
+      } else {
+        setRowWorking(row, false);
+      }
+
     } catch (err) {
       showToast(`${actionName} failed: ${err.message}`, true);
-      setRowWorking(row, false); // Only turn it off on failure, as page reloads on success
+      setRowWorking(row, false);
     }
   }
   adminTable.addEventListener('click', handleRowAction);
-
-  // --- Pagination ---
-  document.getElementById('prev-page')?.addEventListener('click', () => {
-    const page = parseInt(document.getElementById('current-page').textContent);
-    if (page > 1) gotoPage(page - 1);
-  });
-  document.getElementById('next-page')?.addEventListener('click', () => {
-    const page = parseInt(document.getElementById('current-page').textContent);
-    gotoPage(page + 1);
-  });
-  function gotoPage(page) {
-    const url = new URL(window.location.href);
-    url.searchParams.set('page', page);
-    window.location = url;
-  }
 
   // Init
   updateSelectionCount();

@@ -1,143 +1,111 @@
 {% extends "base.html" %}
 {% block title %}Failed Articles{% endblock %}
-{% block content %}
-  <h2 class="text-2xl font-semibold mb-4">Failed Articles</h2>
 
-  <!-- Filter -->
-  <div class="flex mb-4 space-x-2">
-    <input
-      id="search-input"
-      type="text"
-      placeholder="Filter by URL or title…"
-      class="flex-1 px-4 py-2 border rounded focus:outline-none focus:ring"
-    />
-    <button
-      id="clear-search"
-      class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 disabled:opacity-50"
-      disabled
-      title="Clear filter"
-    >✕</button>
+{% block content %}
+<div data-theme="admin" class="max-w-7xl mx-auto py-10 px-4 bg-base-100 rounded-box shadow-lg">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-base-content">Failed Articles</h1>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm btn-ghost">← Back to Admin</a>
   </div>
 
   <!-- Errors table -->
   <div class="overflow-x-auto">
-    <table class="w-full bg-white dark:bg-gray-800 shadow rounded overflow-hidden">
-      <thead class="bg-gray-100 dark:bg-gray-700">
-        <tr class="text-left text-sm text-gray-700 dark:text-gray-300">
-          <th class="px-4 py-2">URL</th>
-          <th class="px-4 py-2">Title</th>
-          <th class="px-4 py-2">When</th>
-          <th class="px-4 py-2">Error</th>
-          <th class="px-4 py-2 text-center">Actions</th>
+    <table class="table table-zebra table-sm w-full">
+      <thead>
+        <tr>
+          <th>Article</th>
+          <th>Error</th>
+          <th class="hidden md:table-cell">Submitted</th>
+          <th>Extraction Details</th>
+          <th>Actions</th>
         </tr>
       </thead>
-      <tbody id="errors-body" class="divide-y divide-gray-200 dark:divide-gray-700">
-        {% for doc in errors %}
-        <tr data-id="{{ doc.id }}" class="bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-200">
-          <td class="px-4 py-2 break-all">{{ doc.url }}</td>
-          <td class="px-4 py-2">{{ doc.title or "—" }}</td>
-          <td class="px-4 py-2">{{ doc.submitted_at or "—" }}</td>
-          <td class="px-4 py-2 truncate max-w-xs" title="{{ doc.error }}">{{ doc.error }}</td>
-          <td class="px-4 py-2">
-            <div class="flex flex-col items-center space-y-1">
-              <button
-                class="retry-btn flex items-center px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
-              >
-                <svg class="retry-spinner hidden animate-spin h-4 w-4 mr-1 text-white" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10"
-                          stroke="currentColor" stroke-width="4" fill="none"/>
-                  <path class="opacity-75" fill="currentColor"
-                        d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
-                <span class="retry-text">Retry</span>
-              </button>
-              <span class="status-msg text-xs"></span>
-              <div class="flex space-x-2 mt-1">
-                <a href="{{ doc.url }}" target="_blank" rel="noopener noreferrer"
-                     class="link link-hover text-xs break-all">{{ doc.url }}</a>
-                <a href="/items/{{ doc.id }}"
-                   class="text-indigo-600 hover:underline text-xs">View</a>
-              </div>
+      <tbody id="errors-body">
+        {% for item in errors %}
+        <tr class="hover">
+          <td>
+            <div class="font-bold">{{ item.title or "Untitled" }}</div>
+            <div class="text-xs opacity-70 truncate max-w-xs">
+              <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" class="link link-hover">{{ item.url }}</a>
             </div>
           </td>
+          <td class="max-w-sm">
+            <div class="tooltip tooltip-bottom" data-tip="{{ item.error_message }}">
+              <span class="text-error text-xs truncate">{{ item.error_message }}</span>
+            </div>
+          </td>
+          <td class="hidden md:table-cell text-xs">{{ item.submitted_at_human }}</td>
+          <td>
+            {% if item.extract_status %}
+              <ul class="text-xs space-y-1">
+                {% for extractor, status in item.extract_status.items() %}
+                  <li>
+                    {% if 'success' in status %}
+                      <span class="badge badge-xs badge-success mr-2"></span>
+                    {% elif 'pending' in status %}
+                      <span class="badge badge-xs badge-ghost mr-2"></span>
+                    {% else %}
+                      <span class="badge badge-xs badge-error mr-2"></span>
+                    {% endif %}
+                    <span class="font-mono">{{ extractor }}</span>:
+                    <span class="opacity-70">{{ status }}</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <span class="text-xs opacity-50">No details</span>
+            {% endif %}
+          </td>
+          <td class="flex flex-wrap gap-1">
+            <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="btn btn-xs btn-ghost">View</a>
+            <button type="button" class="retry-btn btn btn-xs btn-ghost text-accent" data-id="{{ item.id }}">Retry</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center py-4">No failed articles found. Hooray!</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const body        = document.getElementById('errors-body');
-  const searchInput = document.getElementById('search-input');
-  const clearBtn    = document.getElementById('clear-search');
+  // The retry logic from admin.js can be used here if we align the endpoints.
+  // For now, keeping the retry simple as it was in the original file, but pointing to the right place.
+  document.getElementById('errors-body').addEventListener('click', async (e) => {
+    const button = e.target.closest('.retry-btn');
+    if (!button) return;
 
-  // Filtering
-  function filterRows() {
-    const q = searchInput.value.trim().toLowerCase();
-    clearBtn.disabled = !q;
-    body.querySelectorAll('tr').forEach(row => {
-      const txt = row.textContent.toLowerCase();
-      row.style.display = txt.includes(q) ? '' : 'none';
-    });
-  }
-  searchInput.addEventListener('input', filterRows);
-  clearBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    filterRows();
-  });
-
-  // Retry + polling
-  body.addEventListener('click', async e => {
-    if (!e.target.closest('.retry-btn')) return;
-    const btn      = e.target.closest('.retry-btn');
-    const row      = btn.closest('tr');
-    const id       = row.dataset.id;
-    const spinner  = btn.querySelector('.retry-spinner');
-    const txt      = btn.querySelector('.retry-text');
-    const msgEl    = row.querySelector('.status-msg');
-
-    // UI lock
-    btn.disabled = true;
-    spinner.classList.remove('hidden');
-    txt.textContent = 'Retrying…';
-    msgEl.textContent = '';
+    e.preventDefault();
+    const id = button.dataset.id;
+    const row = button.closest('tr');
+    
+    button.classList.add('loading');
+    button.disabled = true;
 
     try {
-      // kick off retry
-      let res = await fetch(`/api/items/${id}/retry`, { method: 'POST' });
-      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+      const res = await fetch(`/admin/retry/${id}`, { method: 'POST' });
+      const resData = await res.json();
+      if (!res.ok || !resData.success) throw new Error(resData.error?.message || 'Unknown error');
+      
+      // On success, fade out and remove the row
+      row.style.transition = 'opacity 0.5s';
+      row.style.opacity = '0';
+      setTimeout(() => row.remove(), 500);
 
-      msgEl.textContent = '⏳ Processing…';
-      // now poll status every 2s
-      for (let i=0; i<30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        res = await fetch(`/api/items/${id}`);
-        if (!res.ok) throw new Error('Item not found');
-        const data = await res.json();
-        if (data.status === 'done') {
-          // slide out & remove row
-          row.style.transition = 'opacity .5s';
-          row.style.opacity = 0;
-          setTimeout(() => row.remove(), 500);
-          return;
-        }
-        if (data.status === 'error') {
-          msgEl.textContent = '⚠️ Failed again';
-          throw new Error(data.error || 'Unknown error');
-        }
-        // still pending
-      }
-      msgEl.textContent = '⏰ Timed out';
     } catch (err) {
-      console.error(err);
-      msgEl.textContent = '⚠️ ' + err.message;
-    } finally {
-      btn.disabled = false;
-      spinner.classList.add('hidden');
-      txt.textContent = 'Retry';
+      console.error(`Failed to retry item ${id}:`, err);
+      button.textContent = 'Failed';
+      setTimeout(() => {
+        button.textContent = 'Retry';
+        button.classList.remove('loading');
+        button.disabled = false;
+      }, 2000);
     }
   });
 });

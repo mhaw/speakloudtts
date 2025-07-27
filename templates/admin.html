@@ -23,13 +23,38 @@
     </select>
     <button type="button" id="apply-bulk" class="btn btn-sm btn-primary" disabled>Apply</button>
     <span id="selected-count" class="text-sm ml-2 text-base-content/80"></span>
-    <div class="flex-grow"></div>
-    <div class="join">
-      <button id="prev-page" class="join-item btn btn-sm" {% if page == 1 %}disabled{% endif %}>&larr; Prev</button>
-      <button class="join-item btn btn-sm" disabled>Page {{ page }}</button>
-      <button id="next-page" class="join-item btn btn-sm" {% if not next_page %}disabled{% endif %}>Next &rarr;</button>
+  </form>
+
+  <!-- Search and Filter Form -->
+  <form method="GET" action="{{ url_for('admin.dashboard') }}" class="mb-4 p-4 bg-base-200 rounded-box">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div>
+        <label for="search_term" class="label-text">Search Term</label>
+        <input type="text" name="search_term" id="search_term" value="{{ search_term or '' }}" class="input input-bordered w-full" placeholder="URL, title, ID...">
+      </div>
+      <div>
+        <label for="status_filter" class="label-text">Status</label>
+        <select name="status_filter" id="status_filter" class="select select-bordered w-full">
+          <option value="">All Statuses</option>
+          <option value="done" {% if status_filter == 'done' %}selected{% endif %}>Done</option>
+          <option value="processing" {% if status_filter == 'processing' %}selected{% endif %}>Processing</option>
+          <option value="error" {% if status_filter == 'error' %}selected{% endif %}>Error</option>
+          <option value="queued" {% if status_filter == 'queued' %}selected{% endif %}>Queued</option>
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost ml-2">Clear</a>
+      </div>
     </div>
   </form>
+
+  <div class="flex justify-end items-center mb-3">
+    <div class="join">
+      <a href="{{ url_for('admin.dashboard') }}" class="join-item btn btn-sm {% if not request.args.get('start_after') %}btn-disabled{% endif %}">&larr; First</a>
+      <a href="{{ url_for('admin.dashboard', start_after=next_page_cursor, search_term=search_term, status_filter=status_filter) }}" id="next-page" class="join-item btn btn-sm {% if not next_page_cursor %}btn-disabled{% endif %}">Next &rarr;</a>
+    </div>
+  </div>
 
   <div class="overflow-x-auto">
     <table id="admin-table" class="table table-zebra table-xs sm:table-sm w-full">

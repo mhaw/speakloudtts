@@ -1,10 +1,10 @@
-# processing.py
 import logging
 import re
+from bs4 import BeautifulSoup
 from google.cloud import firestore
 from extractor import extract_article
 from tts import synthesize_long_text
-from gcp import db # Import the db instance
+from gcp import db
 
 logger = logging.getLogger(__name__)
 
@@ -24,74 +24,69 @@ def _log_failure(item_id, user_id, url, error_message, stage):
     except Exception as e:
         logger.error(f"Failed to log processing failure for item {item_id}: {e}", exc_info=True)
 
-def sanitize_content(text: str, structured_text: list) -> tuple[str, list]:
+def sanitize_content(structured_text: list) -> tuple[str, list]:
     """
-    Cleans extracted text and structured content to remove common cruft.
-    Returns a tuple of (sanitized_text, sanitized_structured_text).
+    Cleans structured content to remove common cruft using CSS selectors.
+    Returns a tuple of (sanitized_plain_text, sanitized_structured_text).
     """
-    if not text and not structured_text:
+    if not structured_text:
         return "", []
 
-    # Patterns to remove (case-insensitive)
-    cruft_patterns = [
-        r"share this article",
-        r"share on facebook",
-        r"share on twitter",
-        r"share on linkedin",
-        r"share on pinterest",
-        r"share on whatsapp",
-        r"share on email",
-        r"click to share",
-        r"we use cookies",
-        r"cookie policy",
-        r"subscribe to our newsletter",
-        r"sign up for our newsletter",
-        r"related stories",
-        r"related articles",
-        r"read more",
-        r"continue reading",
-        r"advertisement",
-        r"supported by",
-        r"follow us on",
-        r"all rights reserved",
-        r"reprints & permissions",
+    # Convert structured text to a single HTML string to be parsed
+    html_string = ""
+    for block in structured_text:
+        if block['type'] == 'p':
+            html_string += f"<p>{block['text']}</p>"
+        elif block['type'].startswith('h'):
+            html_string += f"<{block['type']}>{block['text']}</{block['type']}>"
+        elif block['type'] == 'ul':
+            html_string += "<ul>" + "".join(f"<li>{item}</li>" for item in block['items']) + "</ul>"
+        elif block['type'] == 'ol':
+            html_string += "<ol>" + "".join(f"<li>{item}</li>" for item in block['items']) + "</ol>"
+        elif block['type'] == 'blockquote':
+            html_string += f"<blockquote>{block['text']}</blockquote>"
+
+    soup = BeautifulSoup(html_string, 'html.parser')
+
+    # Selectors for elements to remove
+    cruft_selectors = [
+        ".ad", ".advertisement", ".banner", ".comments", ".cookie-banner", ".footer",
+        ".header", ".nav", ".navbar", ".newsletter-signup", ".related-articles",
+        ".share-buttons", ".sidebar", ".social-links", "aside", "footer", "header", "nav"
     ]
     
-    # Combine patterns into a single regex
-    combined_pattern = re.compile(r'\b(' + '|'.join(cruft_patterns) + r')\b', re.IGNORECASE)
+    for selector in cruft_selectors:
+        for element in soup.select(selector):
+            element.decompose()
 
-    # 1. Sanitize the plain text
-    sanitized_text = combined_pattern.sub('', text)
-    # Normalize whitespace: remove leading/trailing whitespace from lines and reduce multiple newlines to two
-    sanitized_text = '\n'.join(line.strip() for line in sanitized_text.splitlines())
-    sanitized_text = re.sub(r'\n{3,}', '\n\n', sanitized_text).strip()
-
-    # 2. Sanitize the structured text
+    # Rebuild the structured text from the cleaned soup
     sanitized_structured_text = []
-    for block in structured_text:
-        if 'text' in block and isinstance(block['text'], str):
-            original_block_text = block['text']
-            # Remove cruft from the block's text
-            cleaned_block_text = combined_pattern.sub('', original_block_text).strip()
-            
-            # Only add the block if it still has content
-            if cleaned_block_text:
-                block['text'] = cleaned_block_text
-                sanitized_structured_text.append(block)
-        elif 'items' in block and isinstance(block['items'], list):
-            # For lists (ul, ol), clean each item
-            cleaned_items = []
-            for item in block['items']:
-                cleaned_item = combined_pattern.sub('', item).strip()
-                if cleaned_item:
-                    cleaned_items.append(cleaned_item)
-            
-            if cleaned_items:
-                block['items'] = cleaned_items
-                sanitized_structured_text.append(block)
+    for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote']):
+        if tag.name == 'p':
+            text = tag.get_text(strip=True)
+            if text: sanitized_structured_text.append({"type": "p", "text": text})
+        elif tag.name.startswith('h'):
+            text = tag.get_text(strip=True)
+            if text: sanitized_structured_text.append({"type": tag.name, "text": text})
+        elif tag.name in ['ul', 'ol']:
+            items = [li.get_text(strip=True) for li in tag.find_all('li') if li.get_text(strip=True)]
+            if items: sanitized_structured_text.append({"type": tag.name, "items": items})
+        elif tag.name == 'blockquote':
+            text = tag.get_text(strip=True)
+            if text: sanitized_structured_text.append({"type": "blockquote", "text": text})
 
-    logger.info(f"Sanitization complete. Text length changed from {len(text)} to {len(sanitized_text)}.")
-    return sanitized_text, sanitized_structured_text
+    # Generate clean plain text from the sanitized structured text
+    plain_text_parts = []
+    for item in sanitized_structured_text:
+        if 'text' in item:
+            plain_text_parts.append(item['text'])
+        elif 'items' in item:
+            plain_text_parts.extend(item['items'])
+    
+    sanitized_plain_text = "\n\n".join(plain_text_parts)
+    
+    logger.info(f"Sanitization complete. New text length: {len(sanitized_plain_text)}.")
+    return sanitized_plain_text, sanitized_structured_text
 
 
 def process_article_submission(doc_ref, url, voice):
@@ -108,7 +103,7 @@ def process_article_submission(doc_ref, url, voice):
         meta = extract_article(url)
         
         # 1a. Sanitize the extracted content
-        text, structured_text = sanitize_content(meta.get("text", ""), meta.get("structured_text", []))
+        text, structured_text = sanitize_content(meta.get("structured_text", []))
         
         update_data = {
             "title": meta.get("title", "Untitled"),
