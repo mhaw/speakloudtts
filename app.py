@@ -302,6 +302,11 @@ def podcast_feed():
     feed_xml = generate_feed(db, storage_client, app_config)
     return Response(feed_xml, mimetype='application/rss+xml')
 
+@main_bp.route("/podcast")
+def podcast_page():
+    """Renders a user-friendly page with information about the RSS feed."""
+    return render_template("podcast.html")
+
 @main_bp.route("/health")
 def health_check():
     """A simple health check endpoint."""

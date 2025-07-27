@@ -45,7 +45,7 @@
                     <ul class="menu menu-horizontal px-1 space-x-1">
                         <li><a href="/submit" class="btn btn-ghost transition-all duration-300 {% if request.path=='/submit' %}btn-active{% endif %}">Submit</a></li>
                         <li><a href="/items" class="btn btn-ghost transition-all duration-300 {% if request.path.startswith('/items') %}btn-active{% endif %}">Articles</a></li>
-                        <li><a href="/feed.xml" class="btn btn-ghost transition-all duration-300">Feed</a></li>
+                        <li><a href="/podcast" class="btn btn-ghost transition-all duration-300 {% if request.path=='/podcast' %}btn-active{% endif %}">Podcast</a></li>
                         {% if current_user.is_authenticated and current_user.is_admin %}
                             <li><a href="/admin" class="btn btn-ghost transition-all duration-300 {% if request.path.startswith('/admin') %}btn-active{% endif %}">Admin</a></li>
                         {% endif %}
@@ -72,7 +72,7 @@
                     <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 mt-4">
                         <li><a href="/submit">Submit</a></li>
                         <li><a href="/items">Articles</a></li>
-                        <li><a href="/feed.xml">Feed</a></li>
+                        <li><a href="/podcast">Podcast</a></li>
                         {% if current_user.is_authenticated and current_user.is_admin %}
                             <li><a href="/admin">Admin</a></li>
                         {% endif %}

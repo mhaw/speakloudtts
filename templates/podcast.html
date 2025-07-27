@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Podcast & RSS Feed{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto bg-base-100 p-8 rounded-lg shadow-md">
+  <h1 class="text-3xl font-bold mb-4">Your Personal Podcast Feed</h1>
+  <p class="mb-6 text-base-content/80">
+    Subscribe to your personal RSS feed in your favorite podcast app to listen to your articles on the go.
+    Any article you submit will automatically appear in your feed.
+  </p>
+
+  <div class="mb-6">
+    <label for="feed-url" class="block text-sm font-medium text-base-content/90 mb-2">Your Feed URL:</label>
+    <div class="flex">
+      <input id="feed-url" type="text" readonly class="input input-bordered w-full !rounded-r-none" value="{{ url_for('main.podcast_feed', _external=True) }}">
+      <button id="copy-button" class="btn btn-primary !rounded-l-none">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+          <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+        </svg>
+        <span id="copy-text">Copy</span>
+      </button>
+    </div>
+  </div>
+
+  <h2 class="text-xl font-bold mb-4 mt-8">How to Subscribe</h2>
+  <p class="mb-4 text-base-content/80">
+    Most podcast apps allow you to add a feed by URL. Look for an option like "Add Show by URL," "Import from URL," or a simple "+" button, and paste your feed URL.
+  </p>
+  <ul class="list-disc list-inside space-y-2 text-base-content/90">
+    <li><strong>Overcast:</strong> Tap "+" and then "Add URL" in the top right.</li>
+    <li><strong>Pocket Casts:</strong> Paste the URL into the search bar.</li>
+    <li><strong>Apple Podcasts:</strong> Go to Library > Edit > Add a Show by URL.</li>
+  </ul>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const copyButton = document.getElementById('copy-button');
+  const copyText = document.getElementById('copy-text');
+  const feedUrlInput = document.getElementById('feed-url');
+
+  copyButton.addEventListener('click', () => {
+    feedUrlInput.select();
+    document.execCommand('copy');
+    
+    copyText.textContent = 'Copied!';
+    copyButton.classList.add('btn-success');
+
+    setTimeout(() => {
+      copyText.textContent = 'Copy';
+      copyButton.classList.remove('btn-success');
+    }, 2000);
+  });
+});
+</script>
+{% endblock %}
