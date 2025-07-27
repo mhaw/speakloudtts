@@ -29,6 +29,9 @@ main_bp = Blueprint('main', __name__)
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 tasks_bp = Blueprint('tasks', __name__, url_prefix='/tasks')
 
+# --- Caching ---
+cache = Cache()
+
 # --- Login Setup ---
 login_manager = LoginManager()
 login_manager.login_view = "main.login"
@@ -293,6 +296,7 @@ def item_detail(item_id, doc_ref, doc):
     return render_template("item_detail.html", item=item, structured_text=structured_text)
 
 @main_bp.route("/feed.xml")
+@cache.cached(timeout=900)  # Cache for 15 minutes
 def podcast_feed():
     app_config = {"APP_URL_ROOT": request.url_root, "GCS_BUCKET_NAME": current_app.config["GCS_BUCKET_NAME"]}
     feed_xml = generate_feed(db, storage_client, app_config)
@@ -683,7 +687,7 @@ def create_app():
         Talisman(app, content_security_policy=None)
 
     # --- Caching ---
-    Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
+    cache.init_app(app, config={'CACHE_TYPE': 'SimpleCache'})
     
     # --- Login Manager ---
     login_manager.init_app(app)
