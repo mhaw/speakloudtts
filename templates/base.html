@@ -16,6 +16,9 @@
     <!-- Local Tailwind CSS -->
     <link href="{{ url_for('static', filename='css/output.css') }}" rel="stylesheet">
 
+    <!-- RSS Auto-Discovery -->
+    <link rel="alternate" type="application/rss+xml" title="SpeakLoudTTS Audio Articles" href="{{ url_for('main.podcast_feed', _external=True) }}">
+
     <style>
         /* Use Inter as the default font */
         body {
