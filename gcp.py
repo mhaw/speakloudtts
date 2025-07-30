@@ -5,6 +5,7 @@ import json
 from google.cloud import firestore, storage, tasks_v2
 from google.auth.exceptions import DefaultCredentialsError
 from config import config
+from exceptions import GCPInitializationError
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,14 @@ def init_gcp_clients():
     Initializes and returns the GCP clients (Firestore, Storage, Tasks).
     """
     global db, storage_client, bucket, tasks_client
+
+    if config.ENV_MODE == "dev":
+        logger.info("Running in DEV mode. Skipping Google Cloud client initialization.")
+        db = None
+        storage_client = None
+        bucket = None
+        tasks_client = None
+        return db, storage_client, bucket, tasks_client
 
     try:
         db = firestore.Client()
@@ -35,15 +44,18 @@ def init_gcp_clients():
 
     except DefaultCredentialsError as e:
         logger.critical(f"GCP Default Credentials Error: {e}. The application will not work correctly.", exc_info=True)
-        raise
+        raise GCPInitializationError(f"GCP Default Credentials Error: {e}") from e
     except Exception as e:
         logger.critical(f"Failed to initialize one or more Google Cloud clients: {e}", exc_info=True)
-        raise
+        raise GCPInitializationError(f"Failed to initialize GCP clients: {e}") from e
 
-def create_processing_task(item_id: str):
+def create_processing_task(item_id: str, log_extra: dict = None):
     """Creates a new task in the TTS processing queue."""
+    if config.ENV_MODE == "dev":
+        logging.info(f"DEV mode: Skipping Cloud Task creation for item {item_id}.", extra=log_extra)
+        return None
     if not tasks_client:
-        logging.warning("Task client not available. Skipping task creation.")
+        logging.warning("Task client not available. Skipping task creation.", extra=log_extra)
         return None
         
     task_payload = json.dumps({"item_id": item_id}).encode('utf-8')

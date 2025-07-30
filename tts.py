@@ -5,6 +5,7 @@ import subprocess
 import html  # For SSML escaping
 from typing import List, Dict
 from google.cloud import texttospeech, storage
+from exceptions import TTSError
 
 logger = logging.getLogger("tts")
 logger.setLevel(logging.INFO)
@@ -25,8 +26,8 @@ def _get_tts_client():
             TTS_CLIENT_INSTANCE = texttospeech.TextToSpeechClient()
             logger.info("TTS: Initialized TextToSpeechClient.")
         except Exception as e:
-            logger.critical(f"TTS: Failed to initialize TextToSpeechClient: {e}", exc_info=True)
-            raise
+            logger.critical(f"TTS: Failed to initialize TextToSpeechClient: {e}", exc_info=True, extra=log_extra)
+            raise TTSError(f"TTS client initialization failed: {e}") from e
     return TTS_CLIENT_INSTANCE
 
 def _get_storage_client_and_bucket():
@@ -35,15 +36,15 @@ def _get_storage_client_and_bucket():
         try:
             STORAGE_CLIENT_INSTANCE = storage.Client()
             GCS_BUCKET_INSTANCE = STORAGE_CLIENT_INSTANCE.bucket(GCS_BUCKET)
-            logger.info(f"TTS: Initialized StorageClient and bucket '{GCS_BUCKET}'.")
+            logger.info("TTS: Initialized StorageClient and bucket '{GCS_BUCKET}'.", extra=log_extra)
         except Exception as e:
-            logger.critical(f"TTS: Failed to initialize StorageClient or bucket '{GCS_BUCKET}': {e}", exc_info=True)
-            raise
+            logger.critical(f"TTS: Failed to initialize StorageClient or bucket '{GCS_BUCKET}': {e}", exc_info=True, extra=log_extra)
+            raise TTSError(f"Storage client or bucket initialization failed: {e}") from e
     return STORAGE_CLIENT_INSTANCE, GCS_BUCKET_INSTANCE
 
 def _build_ssml(title: str, author: str, paragraphs: List[str]) -> List[str]:
     """Splits article into SSML chunks < MAX_BYTES bytes for Google TTS."""
-    logger.debug(f"Building SSML for '{title}', by '{author}', {len(paragraphs)} paragraphs.")
+    logger.debug(f"Building SSML for '{title}', by '{author}', {len(paragraphs)} paragraphs.", extra=log_extra)
     speak_open_tag, speak_close_tag = "<speak>", "</speak>"
     prefix_content = ""
     if title:
@@ -86,12 +87,15 @@ def synthesize_long_text(
     item_id: str,
     voice_name: str,
     speaking_rate: float = 1.1,
-    force_overwrite: bool = False
+    force_overwrite: bool = False,
+    log_extra: dict = None
 ) -> Dict[str, any]:
     """
     Synthesizes long-form text using Google TTS, uploads MP3 to GCS, returns dict with result.
     """
-    logger.info(f"TTS: Synthesizing item {item_id}: '{title}' with voice {voice_name}")
+    if log_extra is None:
+        log_extra = {}
+    logger.info(f"TTS: Synthesizing item {item_id}: '{title}' with voice {voice_name}", extra=log_extra)
     try:
         tts_client = _get_tts_client()
         _, bucket = _get_storage_client_and_bucket()
@@ -102,7 +106,7 @@ def synthesize_long_text(
     blob = bucket.blob(output_gcs_filename)
 
     if not force_overwrite and blob.exists():
-        logger.info(f"TTS: File {output_gcs_filename} already exists in GCS and force_overwrite is False. Skipping synthesis.")
+        logger.info(f"TTS: File {output_gcs_filename} already exists in GCS and force_overwrite is False. Skipping synthesis.", extra=log_extra)
         return {
             "gcs_path": output_gcs_filename,
             "duration_seconds": 0,  # Duration is unknown without probing, which we skip.
@@ -113,16 +117,16 @@ def synthesize_long_text(
 
     paras = [p.strip() for p in full_text.split('\n') if p.strip()]
     if not paras and not title and not author:
-        logger.warning(f"TTS: No content for item {item_id}. Aborting.")
+        logger.warning(f"TTS: No content for item {item_id}. Aborting.", extra=log_extra)
         return {"uri": None, "duration_seconds": 0, "error": "No content to synthesize."}
 
     ssml_chunks = _build_ssml(title, author, paras)
     if not ssml_chunks:
-        logger.warning(f"TTS: No SSML for item {item_id}. Aborting.")
+        logger.warning(f"TTS: No SSML for item {item_id}. Aborting.", extra=log_extra)
         return {"uri": None, "duration_seconds": 0, "error": "SSML generation resulted in no chunks."}
 
     total_chars = sum(len(chunk) for chunk in ssml_chunks)
-    logger.info(f"TTS: Total billable characters for {item_id}: {total_chars}")
+    logger.info(f"TTS: Total billable characters for {item_id}: {total_chars}", extra=log_extra)
 
     segment_files = []
     audio_config = texttospeech.AudioConfig(
@@ -132,7 +136,7 @@ def synthesize_long_text(
 
     try:
         with tempfile.TemporaryDirectory(prefix=f"speakloudtts_{item_id}_") as tmpdir:
-            logger.info(f"TTS: Using temp dir {tmpdir}")
+            logger.info(f"TTS: Using temp dir {tmpdir}", extra=log_extra)
             # Synthesize all chunks
             for idx, ssml_text in enumerate(ssml_chunks):
                 lang_code = "-".join(voice_name.split('-')[:2])
@@ -147,12 +151,12 @@ def synthesize_long_text(
                     with open(seg_path, "wb") as out_file:
                         out_file.write(response.audio_content)
                     segment_files.append(seg_path)
-                    logger.debug(f"TTS: Saved segment {idx+1} to {seg_path}")
+                    logger.debug(f"TTS: Saved segment {idx+1} to {seg_path}", extra=log_extra)
                 except Exception as e:
-                    logger.error(f"TTS: Failed to synthesize SSML chunk {idx+1}/{len(ssml_chunks)}: {e}", exc_info=True)
-                    raise Exception(f"TTS failed for chunk {idx+1}: {e}")
+                    logger.error(f"TTS: Failed to synthesize SSML chunk {idx+1}/{len(ssml_chunks)}: {e}", exc_info=True, extra=log_extra)
+                    raise TTSError(f"TTS failed for chunk {idx+1}: {e}") from e
             if not segment_files:
-                logger.error(f"TTS: No segments produced for {item_id}.")
+                logger.error(f"TTS: No segments produced for {item_id}.", extra=log_extra)
                 return {"uri": None, "duration_seconds": 0, "error": "No audio segments produced by TTS."}
 
             # Write concat file for ffmpeg
@@ -165,12 +169,12 @@ def synthesize_long_text(
                 "ffmpeg", "-y", "-f", "concat", "-safe", "0",
                 "-i", concat_path, "-c", "copy", merged_path
             ]
-            logger.info(f"TTS: Running ffmpeg: {' '.join(ffmpeg_cmd)}")
+            logger.info(f"TTS: Running ffmpeg: {' '.join(ffmpeg_cmd)}", extra=log_extra)
             process = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
             if process.returncode != 0:
                 err_msg = f"ffmpeg failed with code {process.returncode}. Stderr: {process.stderr.strip()}. Stdout: {process.stdout.strip()}"
-                logger.error(f"TTS: {err_msg}")
-                raise Exception(err_msg)
+                logger.error(f"TTS: {err_msg}", extra=log_extra)
+                raise TTSError(err_msg)
 
             # Probe duration (optional)
             duration = 0.0

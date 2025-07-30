@@ -5,6 +5,7 @@ from google.cloud import firestore
 from extractor import extract_article
 from tts import synthesize_long_text
 from gcp import db
+from exceptions import ExtractionError, TTSError, ProcessingError
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +96,14 @@ def process_article_submission(doc_ref, url, voice):
     Handles failure logging and raises exceptions.
     """
     item_id = doc_ref.id
-    user_id = doc_ref.get().to_dict().get("user_id")
-    logger.info(f"Processing article for item_id: {item_id}, url: {url}")
+    item_data = doc_ref.get().to_dict()
+    user_id = item_data.get("user_id")
+    log_extra = {"item_id": item_id, "user_id": user_id, "url": url}
+    logger.info(f"Processing article for item_id: {item_id}, url: {url}", extra=log_extra)
 
     try:
         # 1. Extract article content
-        meta = extract_article(url)
+        meta = extract_article(url, log_extra=log_extra)
         
         # 1a. Sanitize the extracted content
         text, structured_text = sanitize_content(meta.get("structured_text", []))
@@ -120,20 +123,23 @@ def process_article_submission(doc_ref, url, voice):
             "domain": meta.get("domain", ""),
             "extract_status": meta.get("extract_status", None),
             "error_message": meta.get("error", None),
-            "used_rule_id": meta.get("used_rule_id", None)
+            "used_rule_id": meta.get("used_rule_id", None),
+            "canonical_url": meta.get("canonical_url", url), # Store the canonical URL
+            "description": meta.get("description", ""),
+            "image_url": meta.get("image_url", "")
         }
         doc_ref.update(update_data)
 
         if not text or meta.get("error"):
             error_msg = meta.get('error', 'No text found after sanitization.')
-            raise ValueError(f"Article extraction failed: {error_msg}")
+            raise ExtractionError(f"Article extraction failed: {error_msg}")
 
         # 2. Synthesize audio
         tts_result = synthesize_long_text(
-            meta.get("title"), meta.get("author"), text, item_id, voice
+            meta.get("title"), meta.get("author"), text, item_id, voice, log_extra=log_extra
         )
         if tts_result.get("error"):
-            raise RuntimeError(f"TTS synthesis failed: {tts_result['error']}")
+            raise TTSError(f"TTS synthesis failed: {tts_result['error']}")
 
         # 3. Finalize document
         gcs_path = tts_result.get("gcs_path")
@@ -145,16 +151,16 @@ def process_article_submission(doc_ref, url, voice):
         })
         logger.info(f"Successfully processed item {item_id}")
 
-    except ValueError as e:
+    except ExtractionError as e:
         logger.error(f"Extraction failed for {item_id}: {e}", exc_info=True)
         _log_failure(item_id, user_id, url, str(e), "extraction")
-        raise  # Re-raise to be caught by the task handler
-    except RuntimeError as e:
+        raise ProcessingError(f"Extraction failed: {e}") from e
+    except TTSError as e:
         logger.error(f"TTS failed for {item_id}: {e}", exc_info=True)
         _log_failure(item_id, user_id, url, str(e), "tts")
-        raise  # Re-raise
+        raise ProcessingError(f"TTS failed: {e}") from e
     except Exception as e:
         logger.error(f"An unexpected error occurred processing {item_id}: {e}", exc_info=True)
         _log_failure(item_id, user_id, url, str(e), "unknown")
-        raise # Re-raise
+        raise ProcessingError(f"An unexpected error occurred: {e}") from e
 

@@ -23,6 +23,8 @@ from your_user_module import User
 from processing import process_article_submission
 from rss import generate_feed
 from logging_config import setup_logging
+from exceptions import ApplicationError, ProcessingError
+from extractor import extract_article
 
 # --- Blueprints ---
 main_bp = Blueprint('main', __name__)
@@ -215,7 +217,7 @@ def submit_url():
         
         current_app.logger.info(f"New article submitted: {url}", extra=_get_log_extra())
 
-        if not create_processing_task(item_id):
+        if not create_processing_task(item_id, log_extra=_get_log_extra()):
             current_app.logger.warning(f"Task creation failed for {item_id}. Falling back to synchronous processing.", extra=_get_log_extra())
             process_article_submission(doc_ref, url, voice)
             
@@ -223,10 +225,12 @@ def submit_url():
             data={"redirect": url_for("main.list_items")},
             message="Your article has been successfully submitted!"
         )
+    except ProcessingError as e:
+        current_app.logger.error(f"Processing error submitting URL: {e}", exc_info=True, extra=_get_log_extra())
+        return api_error(str(e), getattr(e, "status_code", 500))
     except Exception as e:
-        current_app.logger.error(f"Error submitting URL: {e}", exc_info=True, extra=_get_log_extra())
-        flash("An error occurred while processing the article.", "error")
-    return redirect(url_for('main.home'))
+        current_app.logger.error(f"Unexpected error submitting URL: {e}", exc_info=True, extra=_get_log_extra())
+        return api_error("An unexpected error occurred.", 500)
 
 
 @main_bp.route('/add')
@@ -253,16 +257,20 @@ def add_article():
         
         current_app.logger.info(f"New article from bookmarklet: {url}", extra=_get_log_extra())
 
-        if not create_processing_task(item_id):
+        if not create_processing_task(item_id, log_extra=_get_log_extra()):
             current_app.logger.warning(f"Task creation failed for {item_id}. Falling back to sync.", extra=_get_log_extra())
             process_article_submission(doc_ref, url, current_app.config["DEFAULT_VOICE"])
 
         flash("Article added successfully!", "success")
         return redirect(url_for('main.item_detail', item_id=item_id))
         
+    except ProcessingError as e:
+        current_app.logger.error(f"Processing error adding article via bookmarklet: {e}", exc_info=True, extra=_get_log_extra())
+        flash(str(e), "error")
+        return redirect(url_for('main.home'))
     except Exception as e:
-        current_app.logger.error(f"Error adding article via bookmarklet: {e}", exc_info=True, extra=_get_log_extra())
-        flash("An error occurred while processing the article.", "error")
+        current_app.logger.error(f"Unexpected error adding article via bookmarklet: {e}", exc_info=True, extra=_get_log_extra())
+        flash("An unexpected error occurred while processing the article.", "error")
         return redirect(url_for('main.home'))
 
 
@@ -307,6 +315,20 @@ def podcast_page():
     """Renders a user-friendly page with information about the RSS feed."""
     return render_template("podcast.html")
 
+@main_bp.route("/debug_extract")
+def debug_extract():
+    url = request.args.get("url")
+    if not url:
+        return "Please provide a URL in the 'url' query parameter.", 400
+    
+    try:
+        article_data = extract_article(url)
+        extracted_text = article_data.get("text", "No text extracted.")
+        return Response(extracted_text, mimetype="text/plain")
+    except Exception as e:
+        current_app.logger.error(f"Error during debug extraction for {url}: {e}", exc_info=True, extra=_get_log_extra())
+        return f"Error extracting article: {e}", 500
+
 @main_bp.route("/health")
 def health_check():
     """A simple health check endpoint."""
@@ -318,6 +340,13 @@ def health_check():
     except Exception as e:
         current_app.logger.critical(f"Health check failed: {e}", exc_info=True)
         return api_error("Application is unhealthy", 503)
+
+@main_bp.route("/debug")
+def debug_route():
+    return jsonify({
+        "status": "running",
+        "env": current_app.config["ENV_MODE"]
+    })
 
 @main_bp.route("/item/<item_id>/tags", methods=["POST"])
 @login_required
@@ -673,12 +702,18 @@ def task_handler():
         elapsed = time.time() - start
         current_app.logger.info(f"Successfully processed item {item_id} in {elapsed:.2f} seconds.", extra=log_extra)
         return api_success(message=f"Successfully processed item {item_id}.")
-    except Exception as e:
-        current_app.logger.error(f"Task handler failed for item {item_id}: {e}", exc_info=True, extra=log_extra)
+    except ProcessingError as e:
+        current_app.logger.error(f"Task handler processing error for item {item_id}: {e}", exc_info=True, extra=log_extra)
         doc_ref.update({"status": "error", "error_message": str(e)})
         elapsed = time.time() - start
         current_app.logger.info(f"Processing failed for item {item_id} after {elapsed:.2f} seconds.", extra=log_extra)
-        return api_error(str(e), 500)
+        return api_error(str(e), getattr(e, "status_code", 500))
+    except Exception as e:
+        current_app.logger.error(f"Task handler unexpected error for item {item_id}: {e}", exc_info=True, extra=log_extra)
+        doc_ref.update({"status": "error", "error_message": str(e)})
+        elapsed = time.time() - start
+        current_app.logger.info(f"Processing failed for item {item_id} after {elapsed:.2f} seconds.", extra=log_extra)
+        return api_error("An unexpected error occurred during task processing.", 500)
 
 def create_app():
     app = Flask(__name__, static_folder="static", template_folder="templates")
@@ -701,5 +736,10 @@ def create_app():
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(tasks_bp)
+
+    @app.errorhandler(ApplicationError)
+    def handle_application_error(error):
+        current_app.logger.error(f"Application Error: {error.message}", exc_info=True, extra=_get_log_extra())
+        return api_error(str(error), getattr(error, "status_code", 500))
 
     return app

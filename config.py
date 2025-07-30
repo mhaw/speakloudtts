@@ -15,6 +15,7 @@ class Config:
     TTS_TASK_SERVICE_ACCOUNT_EMAIL = os.getenv("TTS_TASK_SERVICE_ACCOUNT_EMAIL")
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
     FLASK_ENV = os.getenv("FLASK_ENV", "production")
+    ENV_MODE = os.getenv("ENV_MODE", "prod")
 
     ALLOWED_VOICES = [
         {"code": "en-US-Wavenet-D", "name": "Deep Voice Dave (US Male)"},

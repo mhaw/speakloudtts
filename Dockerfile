@@ -1,23 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # ─── Builder Stage ──────────────────────────────────────────────
-FROM python:3.11-slim AS builder
+FROM mcr.microsoft.com/playwright/python:v1.42.0-jammy AS builder
 
-# Install build tools, headers, and Node.js for frontend build
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-      curl \
-      ffmpeg \
-      libxml2 \
-      libxslt1.1 \
-      libssl-dev \
-      libffi-dev \
-      zlib1g \
-      ca-certificates && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
-    
 WORKDIR /app
 
 # Install Python dependencies

@@ -1,67 +1,25 @@
 Flask==3.0.3
-Werkzeug==3.0.1
-Jinja2==3.1.4
-Flask-Login==0.6.3
-Flask-Talisman==1.1.0
-Flask-Caching==2.1.0
-newspaper3k==0.2.8
-humanize==4.9.0
-
-# Core Google / gRPC related libraries - pinned to versions for better compatibility
-google-api-core==2.24.2
-google-auth==2.39.0
-google-cloud-core==2.4.3
 google-cloud-firestore==2.20.1
 google-cloud-storage==3.1.0
 google-cloud-texttospeech==2.26.0
-google-cloud-tasks==2.13.2
-googleapis-common-protos==1.70.0 # Often a dependency, good to pin
-grpcio==1.73.1                   # Older version, often more compatible with protobuf 4.x
-protobuf==4.25.3                 # To satisfy google-cloud-tasks and be compatible with grpcio 1.59.x
-
-# Other dependencies from your list
-beautifulsoup4==4.13.4
-blinker==1.9.0
-cachetools==5.5.2
-certifi==2025.1.31
-charset-normalizer==3.4.1
-click==8.1.8
-cssselect==1.3.0
-feedfinder2==0.0.4
-feedgen==1.0.0
-feedparser==6.0.11
-filelock==3.18.0
-google-crc32c==1.7.1             # Dependency for google-cloud-storage
-google-resumable-media==2.7.2    # Dependency for google-cloud-storage
-# grpcio-status is a dependency of grpcio, so we don't pin it separately
-gunicorn==20.1.0
-idna==3.10
-itsdangerous==2.2.0
-jieba3k==0.35.1
-joblib==1.4.2
-lxml==5.3.0
-                                # If it's 'lxml' you need, it's just 'lxml'.
-                                # Assuming it's as written for now.
-MarkupSafe==3.0.2               # Jinja2 3.1.4 requires MarkupSafe>=2.0, so 3.0.2 is fine.
-nltk==3.9.1
-pillow==11.2.1
-proto-plus==1.26.1              # Often a dependency of google-cloud libs
-pyasn1==0.6.1
-pyasn1_modules==0.4.2
-python-dateutil==2.9.0.post0
-PyYAML==6.0.2
-regex==2024.11.6
-requests==2.32.3
-requests-file==2.1.0
-rsa==4.9.1
+Flask-Login==0.6.3
+Flask-Talisman==1.1.0
+Flask-Caching==2.1.0
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+html5lib==1.1
+newspaper3k==0.2.8
+trafilatura==1.8.0
 readability-lxml==0.8.1
-sgmllib3k==1.0.0
-six==1.17.0
-soupsieve==2.6
-tinysegmenter==0.3
-tldextract==5.2.0
-toml==0.10.2
-trafilatura==2.0.0
-typing_extensions==4.13.2
-urllib3==2.4.0
-python-dotenv==1.1.1
+python-dateutil==2.9.0.post0
+humanize==4.9.0
+pytest==8.1.1
+flake8==7.0.0
+black==24.3.0
+tenacity==8.2.3
+gunicorn==22.0.0
+python-dotenv==1.0.0
+google-cloud-tasks==2.14.0
+feedgen==1.0.0
+playwright==1.44.0
